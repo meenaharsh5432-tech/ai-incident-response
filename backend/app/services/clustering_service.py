@@ -45,12 +45,15 @@ def cluster_error(db: Session, error: Error) -> tuple[Incident, bool]:
     if existing:
         now = datetime.utcnow()
         if existing.status == IncidentStatus.resolved:
-            # Reactivate: clear resolution fields and treat like a new occurrence.
+            # Reactivate: reset timestamps and wipe all resolution data so the
+            # incident starts fresh for a new resolution cycle.
             existing.status = IncidentStatus.active
-            existing.resolved_at = None
-            existing.mttr_seconds = None
-            existing.occurrence_count += 1
+            existing.first_seen = now
             existing.last_seen = now
+            existing.occurrence_count += 1
+            existing.resolved_at = None
+            existing.resolution_notes = None
+            existing.mttr_seconds = None
             db.commit()
             db.refresh(existing)
             return existing, True
