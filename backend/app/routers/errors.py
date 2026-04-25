@@ -16,7 +16,7 @@ from app.schemas.error import (
     ErrorIngest,
     ErrorResponse,
 )
-from app.services import clustering_service, diagnosis_service, embedding_service, metrics_service
+from app.services import clustering_service, diagnosis_service, metrics_service
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api/errors", tags=["errors"])
@@ -73,11 +73,6 @@ def _ingest_one(
     background_tasks: BackgroundTasks,
     db: Session,
 ) -> ErrorResponse:
-    embed_text = embedding_service.build_embed_text(
-        payload.error_type, payload.message, payload.stack_trace
-    )
-    embedding = embedding_service.generate_embedding(embed_text)
-
     error = Error(
         message=payload.message,
         stack_trace=payload.stack_trace,
@@ -85,7 +80,7 @@ def _ingest_one(
         service_name=payload.service_name,
         environment=payload.environment.value,
         metadata_=payload.metadata,
-        embedding=embedding,
+        embedding=None,
     )
     db.add(error)
     db.flush()

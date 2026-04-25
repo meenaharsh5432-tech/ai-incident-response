@@ -21,10 +21,6 @@ settings = get_settings()
 async def lifespan(app: FastAPI):
     logger.info("Initialising database...")
     init_db()
-    logger.info("Pre-loading embedding model...")
-    from app.services.embedding_service import get_model
-    get_model()
-
     logger.info("Syncing Prometheus gauges from DB...")
     from app.database import SessionLocal
     from app.services.metrics_service import sync_gauges_from_db
