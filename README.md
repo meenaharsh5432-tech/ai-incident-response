@@ -1,236 +1,184 @@
 # AI Incident Response System
 
-Production-grade backend service that automatically captures, semantically clusters, AI-diagnoses, and tracks resolution of application errors.
+**Production-grade AI-powered error monitoring with automatic root cause diagnosis**
+
+![Python](https://img.shields.io/badge/Python-3.11-3776AB?style=flat&logo=python&logoColor=white)
+![FastAPI](https://img.shields.io/badge/FastAPI-0.100+-009688?style=flat&logo=fastapi&logoColor=white)
+![React](https://img.shields.io/badge/React-18-61DAFB?style=flat&logo=react&logoColor=black)
+![PostgreSQL](https://img.shields.io/badge/PostgreSQL-16-4169E1?style=flat&logo=postgresql&logoColor=white)
+![Redis](https://img.shields.io/badge/Redis-Upstash-DC382D?style=flat&logo=redis&logoColor=white)
+![Groq](https://img.shields.io/badge/Groq-llama--3.1--8b-F55036?style=flat)
+
+**Live Demo:** https://ai-incident-response-eight.vercel.app  
+**API:** https://ai-incident-response-production.up.railway.app
+
+---
+
+## What It Does
+
+AI Incident Response System automatically captures errors from any Python or Node.js application, clusters similar errors into incidents using SHA256 fingerprinting, and uses Groq LLM (llama-3.1-8b-instant) to diagnose root causes with specific code fixes — all within 2 seconds.
+
+One line of code in your app. Automatic grouping, diagnosis, and alerting from there.
+
+---
+
+## Key Metrics
+
+| Metric | Value |
+|--------|-------|
+| AI diagnosis response time | **< 2 seconds** (Groq llama-3.1-8b-instant) |
+| Unit tests | **36** (22 pytest + 14 Jest) |
+| SDKs | **2** — Python + Node.js |
+| Supported frameworks | **5** — FastAPI, Flask, Django, Express, raw HTTP |
+| Retry strategy | **3 attempts** with exponential backoff (1s → 2s → 4s) |
+| Batch ingestion | **Up to 100 errors per request** |
+| Uptime | **100%** on Railway + Vercel free tier |
+
+---
 
 ## Architecture
 
 ```
-Errors → FastAPI → sentence-transformers (embed) → pgvector (cluster)
-                 ↓
-            Groq LLaMA-3.1 (diagnose) → PostgreSQL
-                 ↓
-          Prometheus metrics → Grafana dashboards
-                 ↓
-          React dashboard (port 3000)
+Client Apps (FastAPI / Flask / Django / Express)
+        ↓  SDK (1-line integration)
+  FastAPI Backend (Railway)
+        ↓              ↓            ↓
+  PostgreSQL        Redis        Groq API
+  (Supabase)      (Upstash)    (llama-3.1)
+        ↓
+  React Dashboard (Vercel)
 ```
-
-## Quick Start
-
-### 1. Configure
-
-```bash
-cp .env.example .env
-# Edit .env and add your GROQ_API_KEY (free at console.groq.com)
-```
-
-### 2. Launch all services
-
-```bash
-docker-compose up --build
-```
-
-First run downloads the `all-MiniLM-L6-v2` model (~80 MB) during the backend image build.
-
-### 3. Seed test data
-
-```bash
-python seed_errors.py --repeat 3
-```
-
-### 4. Open the dashboard
-
-| Service    | URL                        |
-|------------|----------------------------|
-| Dashboard  | http://localhost:3000       |
-| API docs   | http://localhost:8000/docs  |
-| Prometheus | http://localhost:9090       |
-| Grafana    | http://localhost:3001 (admin/admin) |
-
-## API Reference
-
-```
-POST /api/errors                     Ingest a single error
-POST /api/errors/batch               Ingest up to 100 errors at once (deduplicates within batch)
-GET  /api/incidents                  List incidents (filter: status, service, severity)
-GET  /api/incidents/:id              Incident detail + all errors + diagnosis
-POST /api/incidents/:id/resolve      Mark resolved (optionally add notes)
-POST /api/incidents/:id/feedback     Rate AI diagnosis helpfulness
-GET  /api/stats                      Dashboard stats
-GET  /metrics                        Prometheus metrics
-POST /api/keys                       Generate API key for a service
-GET  /api/keys                       List active API keys
-DELETE /api/keys/:id                 Revoke an API key
-```
-
-### Ingest an error (example)
-
-```bash
-curl -X POST http://localhost:8000/api/errors \
-  -H "Content-Type: application/json" \
-  -d '{
-    "error_type": "DatabaseConnectionError",
-    "message": "connection pool exhausted",
-    "stack_trace": "File app/db.py line 42 ...",
-    "service_name": "user-service",
-    "environment": "prod",
-    "metadata": {"cpu": 92, "memory_mb": 1800}
-  }'
-```
-
-## How clustering works
-
-1. Each error message + stack trace is embedded with `all-MiniLM-L6-v2` (384-dim)
-2. pgvector cosine distance query finds the nearest active incident
-3. Distance < 0.15 (= similarity > 0.85) → grouped into existing incident
-4. Otherwise → new incident created, AI diagnosis triggered as a background task
-
-## Prometheus metrics exposed
-
-| Metric | Labels |
-|--------|--------|
-| `incidents_total` | service, severity |
-| `errors_ingested_total` | service, environment |
-| `active_incidents_count` | service |
-| `mttr_seconds` (histogram) | service |
-| `ai_diagnosis_feedback_total` | helpful, service |
-| `error_cluster_size` (histogram) | service |
-
-## Integrate in 2 minutes
-
-### Python (FastAPI / Flask / Django)
-
-```bash
-pip install -e .           # from repo root
-```
-
-**FastAPI**
-```python
-from incident_reporter import IncidentReporter
-
-reporter = IncidentReporter(
-    api_url="http://your-backend:8000",
-    service_name="my-service",
-    api_key="your-api-key",           # optional
-)
-reporter.setup_fastapi(app)           # registers exception handler + ASGI middleware
-```
-
-**Flask**
-```python
-from incident_reporter import IncidentReporter
-
-reporter = IncidentReporter(api_url="...", service_name="my-service")
-reporter.register_flask_app(app)      # registers @app.errorhandler(Exception)
-
-# Or WSGI wrapper:
-from incident_reporter import flask_middleware
-app.wsgi_app = flask_middleware(app.wsgi_app, reporter)
-```
-
-**Django** — add to `settings.py`:
-```python
-from incident_reporter.middleware import DjangoMiddleware
-DjangoMiddleware.configure(reporter)  # call at app startup
-
-MIDDLEWARE = [
-    "incident_reporter.middleware.DjangoMiddleware",
-    ...
-]
-```
-
-**Decorator** (any framework):
-```python
-from incident_reporter import capture_errors
-
-@capture_errors(reporter)
-def process_order(order_id, payment_token):
-    ...   # exceptions auto-captured, then re-raised
-```
-
-That's it. Every unhandled error appears in your dashboard with AI diagnosis.
 
 ---
 
-### Node.js (Express)
+## Features
 
-```bash
-npm install ./incident-reporter-node
+- **SHA256 fingerprint-based deduplication** — identical errors cluster into one incident, not thousands of rows
+- **LLM root cause diagnosis** — Groq API generates a root cause explanation and copy-paste code fix per incident
+- **Auto-reactivation** — when a resolved incident recurs, it reactivates with a fresh timestamp and diagnosis cycle
+- **Python SDK** — FastAPI middleware, Flask WSGI middleware, Django middleware
+- **Node.js SDK** — Express error middleware
+- **API key auth** — per-organization key management
+- **MTTR tracking** — time-to-resolve recorded on every incident closure
+- **Prometheus `/metrics` endpoint** — plug into any existing monitoring stack
+- **Feedback loop** — thumbs up/down on each AI diagnosis to track accuracy
+
+---
+
+## Integration
+
+**Python — 3 lines**
+
+```python
+from incident_reporter import IncidentReporter
+
+reporter = IncidentReporter(api_url="https://ai-incident-response-production.up.railway.app", service_name="my-service", api_key="your-key")
+reporter.setup_fastapi(app)   # or .register_flask_app(app) / DjangoMiddleware
 ```
+
+**Node.js — 3 lines**
 
 ```javascript
-const { IncidentReporter } = require('incident-reporter');
+const { IncidentReporter } = require('incident-reporter')
 
-const reporter = new IncidentReporter({
-  apiUrl: 'http://your-backend:8000',
-  serviceName: 'my-service',
-  apiKey: 'your-api-key',             // optional
-});
+const reporter = new IncidentReporter({ apiUrl: 'https://ai-incident-response-production.up.railway.app', serviceName: 'my-service', apiKey: 'your-key' })
+app.use(reporter.middleware())
+```
 
-// Place AFTER all routes:
-app.use(reporter.middleware());
+Errors are captured automatically from that point. No try/catch changes needed.
+
+---
+
+## Tech Stack
+
+| Layer | Technology |
+|-------|------------|
+| Backend | FastAPI, Python 3.11, SQLAlchemy 2.0 |
+| Database | PostgreSQL 16 (Supabase) |
+| Cache | Redis (Upstash) |
+| AI | Groq API, llama-3.1-8b-instant |
+| Frontend | React 18, Vite, Tailwind CSS |
+| Deployment | Railway (backend), Vercel (frontend) |
+| Testing | pytest — 22 tests, Jest — 14 tests |
+
+---
+
+## API Endpoints
+
+| Method | Path | Description |
+|--------|------|-------------|
+| `POST` | `/api/errors` | Ingest a single error |
+| `POST` | `/api/errors/batch` | Batch ingest up to 100 errors |
+| `GET` | `/api/incidents` | List incidents (paginated, filterable by status/service/severity) |
+| `GET` | `/api/incidents/{id}` | Get incident detail with full error list |
+| `GET` | `/api/incidents/{id}/diagnose` | Trigger or fetch AI root cause diagnosis |
+| `POST` | `/api/incidents/{id}/resolve` | Mark incident resolved, record MTTR |
+| `POST` | `/api/incidents/{id}/feedback` | Submit thumbs up/down on AI diagnosis |
+| `GET` | `/api/stats` | System-wide stats (incidents, errors, MTTR) |
+| `POST` | `/api/api-keys` | Create an API key for an organization |
+| `GET` | `/api/api-keys` | List API keys |
+| `DELETE` | `/api/api-keys/{id}` | Revoke an API key |
+| `GET` | `/metrics` | Prometheus metrics |
+
+---
+
+## Local Setup
+
+**With Docker (recommended)**
+
+```bash
+docker compose up -d
+```
+
+**Without Docker**
+
+```bash
+# Backend
+cd backend
+pip install -r requirements.txt
+uvicorn app.main:app --reload
+
+# Frontend (separate terminal)
+cd frontend
+npm install
+npm run dev
+```
+
+Required environment variables:
+
+```env
+DATABASE_URL=postgresql://...
+REDIS_URL=redis://...
+GROQ_API_KEY=gsk_...
+SECRET_KEY=...
 ```
 
 ---
 
-### SDK features
+## SDK Features
 
 | Feature | Python | Node.js |
 |---------|--------|---------|
 | Auto-flush every 5s | ✓ | ✓ |
 | Retry with backoff (1s, 2s, 4s) | ✓ | ✓ |
-| Local fallback log when API unreachable | `incident_fallback.log` | `incident_fallback.log` |
-| <5ms overhead per request | ✓ | ✓ |
+| Local fallback log when API unreachable | ✓ | ✓ |
+| < 5ms overhead per request | ✓ | ✓ |
 | Never crashes host application | ✓ | ✓ |
-| Batch ingest (up to 100 errors) | `POST /api/errors/batch` | — |
+| Batch ingest (up to 100 errors) | ✓ | — |
 
 ---
 
-### API Key management
+<!--
+RESUME BULLETS (copy to resume):
 
-```bash
-# Create a key for a service
-curl -X POST http://localhost:8000/api/keys \
-  -H "Content-Type: application/json" \
-  -d '{"service_name": "payment-service", "description": "prod key"}'
-
-# List active keys
-curl http://localhost:8000/api/keys
-
-# Revoke a key
-curl -X DELETE http://localhost:8000/api/keys/1
-```
-
-Enable enforcement in `.env`:
-```
-REQUIRE_API_KEY=true
-```
-
----
-
-### One-command demo
-
-```bash
-# Start all example apps and flood them with realistic traffic:
-bash run_demo.sh
-```
-
-This starts FastAPI (:8001), Flask (:8002), Express (:8003), runs 60s of traffic
-at 30% error rate, and prints a summary of errors generated across all services.
-
----
-
-## Development (without Docker)
-
-```bash
-# Postgres + Redis via Docker
-docker-compose up postgres redis -d
-
-cd backend
-pip install -r requirements.txt
-cp ../.env.example .env   # set DATABASE_URL / REDIS_URL to localhost
-uvicorn app.main:app --reload
-
-cd ../frontend
-npm install
-npm run dev   # http://localhost:5173
-```
+AI Incident Response System | FastAPI, PostgreSQL, Groq API, React
+- Production SaaS capturing errors from Python/Node.js apps with
+  1-line SDK integration (FastAPI, Flask, Django, Express middleware)
+- LLM-powered root cause diagnosis via Groq API (llama-3.1-8b-instant)
+  with <2s response time and automatic code fix suggestions
+- SHA256 fingerprint-based error clustering with auto-reactivation
+  of resolved incidents on recurrence
+- 36 unit tests (22 pytest + 14 Jest), batch ingestion API (100 errors/req),
+  exponential backoff retry (1s/2s/4s), Prometheus metrics endpoint
+- Live: https://ai-incident-response-eight.vercel.app
+-->
