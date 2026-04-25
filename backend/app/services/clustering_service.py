@@ -27,18 +27,37 @@ def find_similar_incident(db: Session, fingerprint: str) -> Optional[Incident]:
 
 def cluster_error(db: Session, error: Error) -> tuple[Incident, bool]:
     """
-    Assign error to an existing active incident with matching fingerprint,
-    or create a new one. Returns (incident, is_new_incident).
+    Assign error to an existing incident with matching fingerprint, or create
+    a new one. Returns (incident, is_new_incident).
+
+    Resolved incidents are reactivated (returns True so diagnosis reruns).
+    Active incidents are updated in-place (returns False).
     """
     fingerprint = _fingerprint_from_error(error)
 
-    # Step 1: look for an existing active incident with this fingerprint.
-    existing = find_similar_incident(db, fingerprint)
+    # Step 1: look for any existing incident with this fingerprint (any status).
+    existing = (
+        db.query(Incident)
+        .filter(Incident.fingerprint == fingerprint)
+        .first()
+    )
 
-    # Step 2: found — bump counters and return.
     if existing:
+        now = datetime.utcnow()
+        if existing.status == IncidentStatus.resolved:
+            # Reactivate: clear resolution fields and treat like a new occurrence.
+            existing.status = IncidentStatus.active
+            existing.resolved_at = None
+            existing.mttr_seconds = None
+            existing.occurrence_count += 1
+            existing.last_seen = now
+            db.commit()
+            db.refresh(existing)
+            return existing, True
+
+        # Step 2: active (or suppressed) — bump counters and return.
         existing.occurrence_count += 1
-        existing.last_seen = datetime.utcnow()
+        existing.last_seen = now
         db.commit()
         db.refresh(existing)
         return existing, False
