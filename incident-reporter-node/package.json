@@ -1,0 +1,19 @@
+{
+  "name": "incident-reporter",
+  "version": "1.0.0",
+  "description": "Node.js SDK for AI Incident Response System — 2-line Express integration",
+  "main": "index.js",
+  "scripts": {
+    "test": "jest",
+    "test:coverage": "jest --coverage"
+  },
+  "keywords": ["incident", "monitoring", "error-tracking", "express", "middleware"],
+  "license": "MIT",
+  "devDependencies": {
+    "jest": "^29.7.0"
+  },
+  "jest": {
+    "testEnvironment": "node",
+    "testMatch": ["**/tests/**/*.test.js"]
+  }
+}

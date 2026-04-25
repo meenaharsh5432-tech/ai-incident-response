@@ -1,0 +1,56 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@import url('https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&display=swap');
+
+@layer base {
+  :root {
+    color-scheme: dark;
+    --bg-top: #020617;
+    --bg-mid: #0f172a;
+    --bg-bottom: #07111f;
+    --text-main: #e2e8f0;
+  }
+
+  * {
+    box-sizing: border-box;
+  }
+
+  html {
+    min-height: 100%;
+    background:
+      radial-gradient(circle at top left, rgba(34, 211, 238, 0.16), transparent 28%),
+      radial-gradient(circle at 85% 10%, rgba(251, 191, 36, 0.12), transparent 20%),
+      linear-gradient(180deg, var(--bg-top), var(--bg-mid) 45%, var(--bg-bottom));
+  }
+
+  body {
+    margin: 0;
+    min-height: 100vh;
+    background: transparent;
+    color: var(--text-main);
+    font-family: 'Space Grotesk', sans-serif;
+  }
+
+  a {
+    color: inherit;
+  }
+
+  button,
+  input {
+    font: inherit;
+  }
+}
+
+body {
+  @apply text-gray-100 antialiased;
+}
+
+#root {
+  min-height: 100vh;
+}
+
+::-webkit-scrollbar { width: 6px; height: 6px; }
+::-webkit-scrollbar-track { @apply bg-slate-950; }
+::-webkit-scrollbar-thumb { @apply rounded bg-slate-700; }
