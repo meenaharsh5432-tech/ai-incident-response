@@ -3,6 +3,7 @@ import logging
 import time
 from typing import Optional
 
+import httpx
 import redis
 
 from app.config import get_settings
@@ -74,47 +75,53 @@ def diagnose_incident(incident: Incident, error_message: str, stack_trace: str) 
     if not settings.GROQ_API_KEY:
         return _fallback("AI diagnosis unavailable — set GROQ_API_KEY in .env to enable.")
 
-    try:
-        from groq import APIConnectionError, APITimeoutError, Groq
-
-        client = Groq(api_key=settings.GROQ_API_KEY, timeout=settings.GROQ_TIMEOUT)
-
-        user_content = (
-            f"Service: {incident.service_name}\n"
-            f"Error type: {incident.error_type}\n"
-            f"Occurrences: {incident.occurrence_count}\n"
-            f"Message: {error_message}\n"
-            f"Stack trace:\n{stack_trace or '(not provided)'}"
-        )
-
-        messages = [
+    user_content = (
+        f"Service: {incident.service_name}\n"
+        f"Error type: {incident.error_type}\n"
+        f"Occurrences: {incident.occurrence_count}\n"
+        f"Message: {error_message}\n"
+        f"Stack trace:\n{stack_trace or '(not provided)'}"
+    )
+    request_payload = {
+        "model": "llama-3.1-8b-instant",
+        "messages": [
             {"role": "system", "content": SYSTEM_PROMPT},
             {"role": "user", "content": user_content},
-        ]
-        _conn_errors = (ConnectionError, APIConnectionError, APITimeoutError)
+        ],
+        "temperature": 0.1,
+        "max_tokens": 1024,
+    }
+    request_headers = {
+        "Authorization": f"Bearer {settings.GROQ_API_KEY}",
+        "Content-Type": "application/json",
+    }
 
-        try:
-            completion = client.chat.completions.create(
-                model="llama-3.1-8b-instant",
-                messages=messages,
-                temperature=0.1,
-                max_tokens=1024,
+    # RemoteProtocolError covers "Connection closed by server" (common on Render free tier)
+    _conn_errors = (httpx.ConnectError, httpx.TimeoutException, httpx.RemoteProtocolError)
+
+    def _post() -> dict:
+        with httpx.Client(timeout=settings.GROQ_TIMEOUT) as client:
+            response = client.post(
+                "https://api.groq.com/openai/v1/chat/completions",
+                headers=request_headers,
+                json=request_payload,
             )
+            response.raise_for_status()
+            return response.json()
+
+    try:
+        try:
+            result = _post()
         except _conn_errors as exc:
             logger.warning("Diagnosis connection error for incident %s (attempt 1), retrying in 5s: %s", incident.id, exc)
             time.sleep(5)
             try:
-                completion = client.chat.completions.create(
-                    model="llama-3.1-8b-instant",
-                    messages=messages,
-                    temperature=0.1,
-                    max_tokens=1024,
-                )
+                result = _post()
             except _conn_errors as retry_exc:
                 logger.warning("Diagnosis failed after retry for incident %s: %s", incident.id, retry_exc)
                 return _CONN_FALLBACK
 
-        raw = completion.choices[0].message.content.strip()
+        raw = result["choices"][0]["message"]["content"].strip()
         diagnosis = _parse_json(raw)
 
         r = get_redis()
