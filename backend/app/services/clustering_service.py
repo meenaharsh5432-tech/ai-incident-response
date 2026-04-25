@@ -54,6 +54,9 @@ def cluster_error(db: Session, error: Error) -> tuple[Incident, bool]:
             existing.resolved_at = None
             existing.resolution_notes = None
             existing.mttr_seconds = None
+            existing.ai_diagnosis = None
+            existing.diagnosis_version = 0
+            existing.last_diagnosed_at = None
             db.commit()
             db.refresh(existing)
             return existing, True
