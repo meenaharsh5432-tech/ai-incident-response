@@ -17,6 +17,8 @@ class Settings(BaseSettings):
         "http://127.0.0.1:5173",
         "http://localhost",
         "http://127.0.0.1",
+        "https://ai-incident-response-eight.vercel.app",
+        "https://*.vercel.app",
     ]
 
     class Config:
