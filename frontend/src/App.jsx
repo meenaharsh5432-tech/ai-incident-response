@@ -33,7 +33,7 @@ function Panel({ title, eyebrow, children, action }) {
   )
 }
 
-export default function App() {
+export default function App({ onLock }) {
   const [tab, setTab] = useState('Overview')
   const [stats, setStats] = useState(null)
   const [health, setHealth] = useState(null)
@@ -258,6 +258,14 @@ export default function App() {
             >
               Refresh now
             </button>
+            {onLock && (
+              <button
+                onClick={onLock}
+                className="rounded-full border border-white/10 bg-white/5 px-4 py-2 text-slate-400 transition hover:border-rose-400/30 hover:bg-rose-500/10 hover:text-rose-300"
+              >
+                Lock
+              </button>
+            )}
             {selectedIncident?.last_seen && (
               <span className="text-sm text-slate-400">
                 Selected incident updated{' '}
