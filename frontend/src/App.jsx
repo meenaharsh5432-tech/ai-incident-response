@@ -503,6 +503,7 @@ export default function App() {
                       loadIncidents()
                       loadSelectedIncident()
                     }}
+                    onDiagnosed={setSelectedIncident}
                     onFeedback={loadOverview}
                   />
                 ) : (

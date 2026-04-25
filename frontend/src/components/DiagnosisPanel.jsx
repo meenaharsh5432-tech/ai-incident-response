@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
-import { diagnoseIncident, getErrorMessage, submitFeedback } from '../api/client'
+import { diagnoseIncident, getErrorMessage, getIncident, submitFeedback } from '../api/client'
 
-export default function DiagnosisPanel({ incident, onFeedback }) {
+export default function DiagnosisPanel({ incident, onDiagnosed, onFeedback }) {
   const [fetchedDiagnosis, setFetchedDiagnosis] = useState(null)
   const [diagnosing, setDiagnosing] = useState(false)
   const [diagnosisError, setDiagnosisError] = useState('')
@@ -28,7 +28,16 @@ export default function DiagnosisPanel({ incident, onFeedback }) {
     setDiagnosing(true)
 
     diagnoseIncident(incident.id)
-      .then((result) => { if (!cancelled) setFetchedDiagnosis(result) })
+      .then((result) => {
+        if (cancelled) return
+        // Display immediately from the response — no second fetch needed for the UI
+        setFetchedDiagnosis(result)
+        // Sync parent state in the background so the updated incident
+        // (with ai_diagnosis + revised severity) replaces the stale copy
+        getIncident(incident.id)
+          .then((updated) => { if (!cancelled) onDiagnosed?.(updated) })
+          .catch(() => {}) // best-effort; display is already correct from result
+      })
       .catch((err) => { if (!cancelled) setDiagnosisError(getErrorMessage(err, 'Diagnosis request failed.')) })
       .finally(() => { if (!cancelled) setDiagnosing(false) })
 

@@ -12,7 +12,7 @@ function fmtMTTR(seconds) {
   return `${(seconds / 3600).toFixed(1)}h`
 }
 
-export default function IncidentDetail({ incident, onResolved, onFeedback }) {
+export default function IncidentDetail({ incident, onResolved, onDiagnosed, onFeedback }) {
   const [resolving, setResolving] = useState(false)
   const [notes, setNotes] = useState('')
   const [showNotes, setShowNotes] = useState(false)
@@ -127,7 +127,7 @@ export default function IncidentDetail({ incident, onResolved, onFeedback }) {
         )}
       </div>
 
-      <DiagnosisPanel incident={incident} onFeedback={onFeedback} />
+      <DiagnosisPanel incident={incident} onDiagnosed={onDiagnosed} onFeedback={onFeedback} />
 
       {incident.errors?.length > 0 && (
         <div className="rounded-[1.75rem] border border-white/10 bg-white/5 p-6 backdrop-blur">
