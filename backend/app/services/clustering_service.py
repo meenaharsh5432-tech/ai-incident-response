@@ -1,6 +1,7 @@
 from datetime import datetime
 from typing import Optional
 
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app.models.error import Error
@@ -30,8 +31,11 @@ def cluster_error(db: Session, error: Error) -> tuple[Incident, bool]:
     or create a new one. Returns (incident, is_new_incident).
     """
     fingerprint = _fingerprint_from_error(error)
+
+    # Step 1: look for an existing active incident with this fingerprint.
     existing = find_similar_incident(db, fingerprint)
 
+    # Step 2: found — bump counters and return.
     if existing:
         existing.occurrence_count += 1
         existing.last_seen = datetime.utcnow()
@@ -39,6 +43,7 @@ def cluster_error(db: Session, error: Error) -> tuple[Incident, bool]:
         db.refresh(existing)
         return existing, False
 
+    # Step 3: not found — create a new incident.
     incident = Incident(
         fingerprint=fingerprint,
         service_name=error.service_name,
@@ -47,7 +52,28 @@ def cluster_error(db: Session, error: Error) -> tuple[Incident, bool]:
         last_seen=datetime.utcnow(),
         occurrence_count=1,
     )
-    db.add(incident)
-    db.commit()
-    db.refresh(incident)
-    return incident, True
+
+    try:
+        # Use a savepoint so a concurrent UniqueViolation only rolls back this
+        # INSERT — the outer transaction (including the caller's error flush) stays
+        # intact. A plain db.rollback() would undo the error flush and crash the
+        # caller when it later calls db.refresh(error).
+        with db.begin_nested():
+            db.add(incident)
+            db.flush()
+        db.commit()
+        db.refresh(incident)
+        return incident, True
+    except IntegrityError:
+        # Race condition: another worker inserted the same fingerprint between
+        # our SELECT and INSERT. The savepoint was rolled back; fetch that winner.
+        existing = (
+            db.query(Incident)
+            .filter(Incident.fingerprint == fingerprint)
+            .first()
+        )
+        existing.occurrence_count += 1
+        existing.last_seen = datetime.utcnow()
+        db.commit()
+        db.refresh(existing)
+        return existing, False
