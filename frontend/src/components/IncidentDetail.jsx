@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { format, formatDistanceToNow } from 'date-fns'
+import { parseDate } from '../utils/date'
 import SeverityBadge from './SeverityBadge'
 import DiagnosisPanel from './DiagnosisPanel'
 import { getErrorMessage, resolveIncident } from '../api/client'
@@ -100,12 +101,12 @@ export default function IncidentDetail({ incident, onResolved, onFeedback }) {
         <div className="mt-6 grid grid-cols-2 gap-3 text-xs sm:grid-cols-4">
           <div>
             <p className="uppercase tracking-[0.18em] text-slate-500">First seen</p>
-            <p className="mt-2 text-sm text-white">{format(new Date(incident.first_seen), 'MMM d, HH:mm')}</p>
+            <p className="mt-2 text-sm text-white">{format(parseDate(incident.first_seen), 'MMM d, HH:mm')}</p>
           </div>
           <div>
             <p className="uppercase tracking-[0.18em] text-slate-500">Last seen</p>
             <p className="mt-2 text-sm text-white">
-              {formatDistanceToNow(new Date(incident.last_seen), { addSuffix: true })}
+              {formatDistanceToNow(parseDate(incident.last_seen), { addSuffix: true })}
             </p>
           </div>
           <div>
@@ -144,7 +145,7 @@ export default function IncidentDetail({ incident, onResolved, onFeedback }) {
                 <div key={errorItem.id} className="rounded-2xl border border-white/10 bg-slate-950/80 p-4 text-xs">
                   <div className="mb-2 flex items-center justify-between">
                     <span className="text-slate-400">
-                      {format(new Date(errorItem.created_at), 'MMM d HH:mm:ss')} · {errorItem.environment}
+                      {format(parseDate(errorItem.created_at), 'MMM d HH:mm:ss')} · {errorItem.environment}
                     </span>
                   </div>
                   <p className="break-words text-sm text-slate-200">{errorItem.message}</p>

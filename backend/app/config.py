@@ -7,6 +7,7 @@ class Settings(BaseSettings):
     DATABASE_URL: str = "postgresql://incident_user:incident_pass@localhost:5432/incident_db"
     REDIS_URL: str = "redis://localhost:6379"
     GROQ_API_KEY: str = ""
+    GROQ_TIMEOUT: int = 30
     EMBEDDING_MODEL: str = "all-MiniLM-L6-v2"
     SIMILARITY_THRESHOLD: float = 0.85
     DIAGNOSIS_COOLDOWN_SECONDS: int = 3600

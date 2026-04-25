@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from 'react'
 import { format } from 'date-fns'
+import { parseDate } from '../utils/date'
 import { createApiKey, getErrorMessage, listApiKeys, revokeApiKey } from '../api/client'
 
 export default function APIKeys({ onKeyCreated }) {
@@ -177,7 +178,7 @@ export default function APIKeys({ onKeyCreated }) {
                       )}
                     </td>
                     <td className="px-5 py-4 text-slate-400">
-                      {format(new Date(k.created_at), 'MMM d, yyyy')}
+                      {format(parseDate(k.created_at), 'MMM d, yyyy')}
                     </td>
                     <td className="px-5 py-4 text-right">
                       <button

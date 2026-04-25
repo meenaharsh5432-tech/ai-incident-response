@@ -1,5 +1,6 @@
 import json
 import logging
+import time
 from typing import Optional
 
 import redis
@@ -61,13 +62,22 @@ def should_diagnose(incident: Incident) -> bool:
     return True
 
 
+_CONN_FALLBACK = {
+    "root_cause": "AI diagnosis temporarily unavailable",
+    "steps": ["Check application logs", "Review stack trace manually"],
+    "code_snippet": "",
+    "severity": "medium",
+}
+
+
 def diagnose_incident(incident: Incident, error_message: str, stack_trace: str) -> dict:
     if not settings.GROQ_API_KEY:
         return _fallback("AI diagnosis unavailable — set GROQ_API_KEY in .env to enable.")
 
     try:
-        from groq import Groq
-        client = Groq(api_key=settings.GROQ_API_KEY)
+        from groq import APIConnectionError, APITimeoutError, Groq
+
+        client = Groq(api_key=settings.GROQ_API_KEY, timeout=settings.GROQ_TIMEOUT)
 
         user_content = (
             f"Service: {incident.service_name}\n"
@@ -77,15 +87,32 @@ def diagnose_incident(incident: Incident, error_message: str, stack_trace: str) 
             f"Stack trace:\n{stack_trace or '(not provided)'}"
         )
 
-        completion = client.chat.completions.create(
-            model="llama-3.1-8b-instant",
-            messages=[
-                {"role": "system", "content": SYSTEM_PROMPT},
-                {"role": "user", "content": user_content},
-            ],
-            temperature=0.1,
-            max_tokens=1024,
-        )
+        messages = [
+            {"role": "system", "content": SYSTEM_PROMPT},
+            {"role": "user", "content": user_content},
+        ]
+        _conn_errors = (ConnectionError, APIConnectionError, APITimeoutError)
+
+        try:
+            completion = client.chat.completions.create(
+                model="llama-3.1-8b-instant",
+                messages=messages,
+                temperature=0.1,
+                max_tokens=1024,
+            )
+        except _conn_errors as exc:
+            logger.warning("Diagnosis connection error for incident %s (attempt 1), retrying in 5s: %s", incident.id, exc)
+            time.sleep(5)
+            try:
+                completion = client.chat.completions.create(
+                    model="llama-3.1-8b-instant",
+                    messages=messages,
+                    temperature=0.1,
+                    max_tokens=1024,
+                )
+            except _conn_errors as retry_exc:
+                logger.warning("Diagnosis failed after retry for incident %s: %s", incident.id, retry_exc)
+                return _CONN_FALLBACK
 
         raw = completion.choices[0].message.content.strip()
         diagnosis = _parse_json(raw)

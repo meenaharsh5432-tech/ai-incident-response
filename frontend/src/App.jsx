@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { format, formatDistanceToNow } from 'date-fns'
+import { parseDate } from './utils/date'
 import StatsCard from './components/StatsCard'
 import IncidentList from './components/IncidentList'
 import IncidentDetail from './components/IncidentDetail'
@@ -193,10 +194,10 @@ export default function App() {
     ]
   }, [stats])
 
-  const lastUpdated = stats?.last_updated ? format(new Date(stats.last_updated), 'MMM d, HH:mm:ss') : null
+  const lastUpdated = stats?.last_updated ? format(parseDate(stats.last_updated), 'MMM d, HH:mm:ss') : null
   const liveNow = format(now, 'MMM d, HH:mm:ss')
   const syncLabel = stats?.last_updated
-    ? `${formatDistanceToNow(new Date(stats.last_updated), { addSuffix: true })}`
+    ? `${formatDistanceToNow(parseDate(stats.last_updated), { addSuffix: true })}`
     : 'Waiting for first backend response.'
   const selectedTabLabel = tab === 'Resolved' ? 'resolved' : 'active'
 
@@ -260,7 +261,7 @@ export default function App() {
             {selectedIncident?.last_seen && (
               <span className="text-sm text-slate-400">
                 Selected incident updated{' '}
-                {formatDistanceToNow(new Date(selectedIncident.last_seen), { addSuffix: true })}
+                {formatDistanceToNow(parseDate(selectedIncident.last_seen), { addSuffix: true })}
               </span>
             )}
           </div>
@@ -375,7 +376,7 @@ export default function App() {
                               </div>
                               <div className="mt-4 flex items-center justify-between text-sm text-slate-400">
                                 <span>{incident.occurrence_count}x occurrences</span>
-                                <span>{formatDistanceToNow(new Date(incident.last_seen), { addSuffix: true })}</span>
+                                <span>{formatDistanceToNow(parseDate(incident.last_seen), { addSuffix: true })}</span>
                               </div>
                             </button>
                           ))}

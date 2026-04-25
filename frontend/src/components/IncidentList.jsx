@@ -1,4 +1,5 @@
 import { formatDistanceToNow } from 'date-fns'
+import { parseDate } from '../utils/date'
 import SeverityBadge from './SeverityBadge'
 
 const statusDot = {
@@ -40,7 +41,7 @@ export default function IncidentList({ incidents = [], onSelect, selectedId }) {
             <div className="flex shrink-0 flex-col items-end gap-1">
               <SeverityBadge severity={incident.severity} />
               <span className="text-xs text-slate-400">
-                {incident.occurrence_count}x · {formatDistanceToNow(new Date(incident.last_seen), { addSuffix: true })}
+                {incident.occurrence_count}x · {formatDistanceToNow(parseDate(incident.last_seen), { addSuffix: true })}
               </span>
             </div>
           </div>
