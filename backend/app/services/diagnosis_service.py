@@ -50,102 +50,6 @@ def _fallback(reason: str) -> dict:
     }
 
 
-# Each entry: (substrings_to_match_in_error_type, diagnosis_dict).
-# Matched case-insensitively against error_type; first match wins.
-_RULES: list[tuple[list[str], dict]] = [
-    (
-        ["timeout", "connection"],
-        {
-            "root_cause": "Database or network connection issue. Check connection pool settings and network configuration.",
-            "severity": "high",
-            "steps": [
-                "Check connection pool settings and increase pool size if needed",
-                "Verify network configuration and firewall rules between services",
-                "Add connection retry logic with exponential backoff",
-            ],
-            "code_snippet": "engine = create_engine(DATABASE_URL, pool_size=10, max_overflow=20, pool_pre_ping=True)",
-            "prevention": "Implement circuit breakers and connection pool monitoring.",
-        },
-    ),
-    (
-        ["valueerror", "typeerror"],
-        {
-            "root_cause": "Input validation error. Add input validation and type checking.",
-            "severity": "medium",
-            "steps": [
-                "Identify the source of the unexpected value and trace it to its origin",
-                "Add explicit type checks and validation at service boundaries",
-                "Return structured error responses instead of letting exceptions propagate",
-            ],
-            "code_snippet": "if not isinstance(value, expected_type):\n    raise ValueError(f'Expected {expected_type.__name__}, got {type(value).__name__}')",
-            "prevention": "Validate all external inputs at the entry point using a schema library (e.g. Pydantic).",
-        },
-    ),
-    (
-        ["permission", "auth"],
-        {
-            "root_cause": "Authentication/authorization failure. Verify credentials and token expiry.",
-            "severity": "high",
-            "steps": [
-                "Check that API keys, tokens, and credentials are current and correctly configured",
-                "Verify token expiry and refresh logic is working as expected",
-                "Review role and permission assignments for the affected service account",
-            ],
-            "code_snippet": "if not token or is_expired(token):\n    raise HTTPException(status_code=401, detail='Token expired or missing')",
-            "prevention": "Automate credential rotation and add token-expiry alerts.",
-        },
-    ),
-    (
-        ["keyerror", "attributeerror"],
-        {
-            "root_cause": "Missing key or attribute. Add null checks and defensive programming.",
-            "severity": "medium",
-            "steps": [
-                "Identify which key or attribute is missing and where it is expected",
-                "Add null/existence checks before accessing optional fields",
-                "Ensure API response schemas and internal data contracts are enforced",
-            ],
-            "code_snippet": "value = data.get('key') if isinstance(data, dict) else getattr(obj, 'attr', None)",
-            "prevention": "Define and validate data contracts with typed schemas at every service boundary.",
-        },
-    ),
-    (
-        ["memoryerror", "memory"],
-        {
-            "root_cause": "Memory exhaustion. Optimize memory usage or increase available RAM.",
-            "severity": "critical",
-            "steps": [
-                "Profile memory usage to identify the largest allocations",
-                "Switch to streaming or chunked processing for large datasets",
-                "Add memory limits and health-check endpoints to detect exhaustion early",
-            ],
-            "code_snippet": "for chunk in (data[i:i+1000] for i in range(0, len(data), 1000)):\n    process(chunk)",
-            "prevention": "Set container memory limits and alert when usage exceeds 80%.",
-        },
-    ),
-]
-
-_DEFAULT_RULE: dict = {
-    "root_cause": "Application error. Review stack trace for root cause.",
-    "severity": "medium",
-    "steps": [
-        "Inspect the full stack trace to identify the failing line",
-        "Check recent deployments or configuration changes for regressions",
-        "Add structured logging around the error path for future observability",
-    ],
-    "code_snippet": "",
-    "prevention": "Add structured logging and alerting around this code path.",
-}
-
-
-def _rule_based_diagnosis(error_type: str) -> dict:
-    key = (error_type or "").lower()
-    for substrings, diagnosis in _RULES:
-        if any(s in key for s in substrings):
-            return diagnosis
-    return _DEFAULT_RULE
-
-
 def should_diagnose(incident: Incident) -> bool:
     r = get_redis()
     cooldown_key = f"dx:cooldown:{incident.id}"
@@ -159,10 +63,17 @@ def should_diagnose(incident: Incident) -> bool:
     return True
 
 
+_CONN_FALLBACK = {
+    "root_cause": "AI diagnosis temporarily unavailable",
+    "steps": ["Check application logs", "Review stack trace manually"],
+    "code_snippet": "",
+    "severity": "medium",
+}
+
+
 def diagnose_incident(incident: Incident, error_message: str, stack_trace: str) -> dict:
     if not settings.GROQ_API_KEY:
-        logger.info("GROQ_API_KEY not set; using rule-based diagnosis for incident %s", incident.id)
-        return _rule_based_diagnosis(incident.error_type)
+        return _fallback("AI diagnosis unavailable — set GROQ_API_KEY in .env to enable.")
 
     user_content = (
         f"Service: {incident.service_name}\n"
@@ -207,8 +118,8 @@ def diagnose_incident(incident: Incident, error_message: str, stack_trace: str) 
             try:
                 result = _post()
             except _conn_errors as retry_exc:
-                logger.warning("Diagnosis connection failed after retry for incident %s, using rule-based fallback: %s", incident.id, retry_exc)
-                return _rule_based_diagnosis(incident.error_type)
+                logger.warning("Diagnosis failed after retry for incident %s: %s", incident.id, retry_exc)
+                return _CONN_FALLBACK
 
         raw = result["choices"][0]["message"]["content"].strip()
         diagnosis = _parse_json(raw)
@@ -220,8 +131,8 @@ def diagnose_incident(incident: Incident, error_message: str, stack_trace: str) 
         return diagnosis
 
     except Exception as exc:
-        logger.warning("Diagnosis failed for incident %s, using rule-based fallback: %s", incident.id, exc)
-        return _rule_based_diagnosis(incident.error_type)
+        logger.warning("Diagnosis failed for incident %s: %s", incident.id, exc)
+        return _fallback(f"Diagnosis request failed: {exc}")
 
 
 def _parse_json(text: str) -> dict:

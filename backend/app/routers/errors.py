@@ -1,22 +1,20 @@
 import logging
-from datetime import datetime
 from typing import Optional
 
-from fastapi import APIRouter, BackgroundTasks, Depends, Header, HTTPException
+from fastapi import APIRouter, Depends, Header, HTTPException
 from sqlalchemy.orm import Session
 
 from app.config import get_settings
-from app.database import SessionLocal, get_db
+from app.database import get_db
 from app.models.api_key import APIKey
 from app.models.error import Error
-from app.models.incident import Incident, IncidentSeverity
 from app.schemas.error import (
     BatchErrorResponse,
     ErrorBatchIngest,
     ErrorIngest,
     ErrorResponse,
 )
-from app.services import clustering_service, diagnosis_service, metrics_service
+from app.services import clustering_service, metrics_service
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api/errors", tags=["errors"])
@@ -43,34 +41,8 @@ def _get_api_key(
     return api_key
 
 
-def _run_diagnosis(incident_id: int, error_message: str, stack_trace: str) -> None:
-    db = SessionLocal()
-    try:
-        incident = db.get(Incident, incident_id)
-        if not incident or not diagnosis_service.should_diagnose(incident):
-            return
-
-        diagnosis = diagnosis_service.diagnose_incident(incident, error_message, stack_trace)
-
-        incident.ai_diagnosis = diagnosis
-        incident.last_diagnosed_at = datetime.utcnow()
-        incident.diagnosis_version += 1
-
-        severity = diagnosis_service.SEVERITY_MAP.get(
-            diagnosis.get("severity", "medium"), IncidentSeverity.medium
-        )
-        incident.severity = severity
-        db.commit()
-        logger.info("Diagnosed incident %s → severity=%s", incident_id, severity)
-    except Exception as exc:
-        logger.error("Background diagnosis failed for incident %s: %s", incident_id, exc)
-    finally:
-        db.close()
-
-
 def _ingest_one(
     payload: ErrorIngest,
-    background_tasks: BackgroundTasks,
     db: Session,
 ) -> ErrorResponse:
     error = Error(
@@ -94,11 +66,6 @@ def _ingest_one(
     if is_new:
         metrics_service.record_new_incident(payload.service_name, incident.severity.value)
 
-    if is_new or diagnosis_service.should_diagnose(incident):
-        background_tasks.add_task(
-            _run_diagnosis, incident.id, payload.message, payload.stack_trace or ""
-        )
-
     return ErrorResponse(
         id=error.id,
         incident_id=incident.id,
@@ -113,17 +80,15 @@ def _ingest_one(
 @router.post("", response_model=ErrorResponse, status_code=201)
 def ingest_error(
     payload: ErrorIngest,
-    background_tasks: BackgroundTasks,
     db: Session = Depends(get_db),
     _api_key: Optional[APIKey] = Depends(_get_api_key),
 ):
-    return _ingest_one(payload, background_tasks, db)
+    return _ingest_one(payload, db)
 
 
 @router.post("/batch", response_model=BatchErrorResponse, status_code=201)
 def ingest_errors_batch(
     payload: ErrorBatchIngest,
-    background_tasks: BackgroundTasks,
     db: Session = Depends(get_db),
     _api_key: Optional[APIKey] = Depends(_get_api_key),
 ):
@@ -143,7 +108,7 @@ def ingest_errors_batch(
 
     results = []
     for err in unique_errors:
-        results.append(_ingest_one(err, background_tasks, db))
+        results.append(_ingest_one(err, db))
 
     return BatchErrorResponse(
         processed=len(unique_errors),

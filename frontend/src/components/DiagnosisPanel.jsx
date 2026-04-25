@@ -1,33 +1,79 @@
-import { useState } from 'react'
-import { getErrorMessage, submitFeedback } from '../api/client'
+import { useEffect, useState } from 'react'
+import { diagnoseIncident, getErrorMessage, submitFeedback } from '../api/client'
 
 export default function DiagnosisPanel({ incident, onFeedback }) {
+  const [fetchedDiagnosis, setFetchedDiagnosis] = useState(null)
+  const [diagnosing, setDiagnosing] = useState(false)
+  const [diagnosisError, setDiagnosisError] = useState('')
   const [submitting, setSubmitting] = useState(false)
   const [feedbackDone, setFeedbackDone] = useState(false)
   const [actualFix, setActualFix] = useState('')
-  const [error, setError] = useState('')
+  const [feedbackError, setFeedbackError] = useState('')
 
-  const diagnosis = incident.ai_diagnosis
+  // Use freshly fetched diagnosis if available, otherwise fall back to stored one
+  const diagnosis = fetchedDiagnosis ?? incident.ai_diagnosis
+
+  useEffect(() => {
+    // Reset per-incident state whenever the selected incident changes
+    setFetchedDiagnosis(null)
+    setDiagnosisError('')
+    setFeedbackDone(false)
+    setActualFix('')
+    setFeedbackError('')
+
+    // If the incident already has a diagnosis, nothing to do
+    if (incident.ai_diagnosis) return
+
+    let cancelled = false
+    setDiagnosing(true)
+
+    diagnoseIncident(incident.id)
+      .then((result) => { if (!cancelled) setFetchedDiagnosis(result) })
+      .catch((err) => { if (!cancelled) setDiagnosisError(getErrorMessage(err, 'Diagnosis request failed.')) })
+      .finally(() => { if (!cancelled) setDiagnosing(false) })
+
+    return () => { cancelled = true }
+  }, [incident.id]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  if (diagnosing) {
+    return (
+      <div className="rounded-[1.75rem] border border-white/10 bg-white/5 p-6 backdrop-blur">
+        <h3 className="mb-4 text-xs font-semibold uppercase tracking-[0.24em] text-slate-400">AI Diagnosis</h3>
+        <div className="flex items-center gap-3 text-sm text-slate-400">
+          <span className="h-4 w-4 animate-spin rounded-full border-2 border-slate-600 border-t-cyan-400" />
+          Analyzing incident...
+        </div>
+      </div>
+    )
+  }
+
+  if (diagnosisError) {
+    return (
+      <div className="rounded-[1.75rem] border border-white/10 bg-white/5 p-6 backdrop-blur">
+        <h3 className="mb-2 text-xs font-semibold uppercase tracking-[0.24em] text-slate-400">AI Diagnosis</h3>
+        <p className="text-sm text-rose-300">{diagnosisError}</p>
+      </div>
+    )
+  }
 
   if (!diagnosis) {
     return (
       <div className="rounded-[1.75rem] border border-white/10 bg-white/5 p-6 backdrop-blur">
         <h3 className="mb-2 text-xs font-semibold uppercase tracking-[0.24em] text-slate-400">AI Diagnosis</h3>
-        <p className="text-sm text-slate-400">Analysis is still running. Check back in a few seconds.</p>
+        <p className="text-sm text-slate-400">No diagnosis available.</p>
       </div>
     )
   }
 
   async function handleFeedback(helpful) {
     setSubmitting(true)
-    setError('')
-
+    setFeedbackError('')
     try {
       await submitFeedback(incident.id, helpful, actualFix || null)
       setFeedbackDone(true)
       onFeedback?.()
-    } catch (submitError) {
-      setError(getErrorMessage(submitError, 'Unable to save feedback right now.'))
+    } catch (err) {
+      setFeedbackError(getErrorMessage(err, 'Unable to save feedback right now.'))
     } finally {
       setSubmitting(false)
     }
@@ -74,9 +120,9 @@ export default function DiagnosisPanel({ incident, onFeedback }) {
         </div>
       )}
 
-      {error && (
+      {feedbackError && (
         <div className="rounded-2xl border border-rose-400/30 bg-rose-500/10 px-4 py-3 text-sm text-rose-100">
-          {error}
+          {feedbackError}
         </div>
       )}
 

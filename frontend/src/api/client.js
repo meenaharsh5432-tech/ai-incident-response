@@ -53,6 +53,8 @@ export const getHealth = () => unwrap(api.get('/api/health'))
 export const getStats = () => unwrap(api.get('/api/stats'))
 export const getIncidents = (params = {}) => unwrap(api.get('/api/incidents', { params }))
 export const getIncident = (id) => unwrap(api.get(`/api/incidents/${id}`))
+// Longer timeout: Groq call can take up to ~65s (30s timeout + 5s sleep + 30s retry)
+export const diagnoseIncident = (id) => unwrap(api.get(`/api/incidents/${id}/diagnose`, { timeout: 70000 }))
 export const resolveIncident = (id, notes) =>
   unwrap(api.post(`/api/incidents/${id}/resolve`, { resolution_notes: notes }))
 export const submitFeedback = (id, wasHelpful, actualFix) =>

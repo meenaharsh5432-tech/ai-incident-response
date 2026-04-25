@@ -1,3 +1,4 @@
+import logging
 from datetime import datetime
 
 from fastapi import APIRouter, Depends, HTTPException, Query
@@ -5,11 +6,14 @@ from sqlalchemy import desc
 from sqlalchemy.orm import Session
 
 from app.database import get_db
+from app.models.error import Error
 from app.models.feedback import Feedback
-from app.models.incident import Incident, IncidentStatus
+from app.models.incident import Incident, IncidentSeverity, IncidentStatus
 from app.schemas.feedback import FeedbackCreate, FeedbackResponse
 from app.schemas.incident import IncidentDetail, IncidentSummary, PaginatedIncidents, ResolveRequest
-from app.services import metrics_service
+from app.services import diagnosis_service, metrics_service
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/api/incidents", tags=["incidents"])
 
@@ -44,6 +48,35 @@ def get_incident(incident_id: int, db: Session = Depends(get_db)):
     if not incident:
         raise HTTPException(status_code=404, detail="Incident not found")
     return incident
+
+
+@router.get("/{incident_id}/diagnose")
+def run_diagnosis(incident_id: int, db: Session = Depends(get_db)):
+    incident = db.get(Incident, incident_id)
+    if not incident:
+        raise HTTPException(status_code=404, detail="Incident not found")
+
+    latest_error = (
+        db.query(Error)
+        .filter(Error.incident_id == incident_id)
+        .order_by(desc(Error.created_at))
+        .first()
+    )
+    error_message = latest_error.message if latest_error else incident.error_type
+    stack_trace = (latest_error.stack_trace or "") if latest_error else ""
+
+    diagnosis = diagnosis_service.diagnose_incident(incident, error_message, stack_trace)
+
+    incident.ai_diagnosis = diagnosis
+    incident.last_diagnosed_at = datetime.utcnow()
+    incident.diagnosis_version += 1
+    incident.severity = diagnosis_service.SEVERITY_MAP.get(
+        diagnosis.get("severity", "medium"), IncidentSeverity.medium
+    )
+    db.commit()
+
+    logger.info("Diagnosed incident %s on demand → severity=%s", incident_id, incident.severity)
+    return diagnosis
 
 
 @router.post("/{incident_id}/resolve")
