@@ -14,6 +14,8 @@ export default function DiagnosisPanel({ incident, onDiagnosed, onFeedback }) {
   const diagnosis = fetchedDiagnosis ?? incident.ai_diagnosis
 
   useEffect(() => {
+    console.log('[DiagnosisPanel] effect fired — incident.id:', incident.id, '| ai_diagnosis:', incident.ai_diagnosis, '| typeof:', typeof incident.ai_diagnosis)
+
     // Reset per-incident state whenever the selected incident changes
     setFetchedDiagnosis(null)
     setDiagnosisError('')
@@ -22,14 +24,19 @@ export default function DiagnosisPanel({ incident, onDiagnosed, onFeedback }) {
     setFeedbackError('')
 
     // If the incident already has a diagnosis, nothing to do
-    if (incident.ai_diagnosis) return
+    if (incident.ai_diagnosis) {
+      console.log('[DiagnosisPanel] skipping diagnose — ai_diagnosis is already set:', incident.ai_diagnosis)
+      return
+    }
 
     let cancelled = false
     setDiagnosing(true)
 
+    console.log('[DiagnosisPanel] calling diagnoseIncident for incident.id:', incident.id)
     diagnoseIncident(incident.id)
       .then((result) => {
         if (cancelled) return
+        console.log('[DiagnosisPanel] diagnoseIncident succeeded:', result)
         // Display immediately from the response — no second fetch needed for the UI
         setFetchedDiagnosis(result)
         // Sync parent state in the background so the updated incident
@@ -38,7 +45,10 @@ export default function DiagnosisPanel({ incident, onDiagnosed, onFeedback }) {
           .then((updated) => { if (!cancelled) onDiagnosed?.(updated) })
           .catch(() => {}) // best-effort; display is already correct from result
       })
-      .catch((err) => { if (!cancelled) setDiagnosisError(getErrorMessage(err, 'Diagnosis request failed.')) })
+      .catch((err) => {
+        console.log('[DiagnosisPanel] diagnoseIncident failed:', err)
+        if (!cancelled) setDiagnosisError(getErrorMessage(err, 'Diagnosis request failed.'))
+      })
       .finally(() => { if (!cancelled) setDiagnosing(false) })
 
     return () => { cancelled = true }
