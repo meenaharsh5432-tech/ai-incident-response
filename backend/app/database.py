@@ -39,8 +39,11 @@ def init_db():
         conn.execute(text("ALTER TABLE incidents ADD COLUMN IF NOT EXISTS user_id INTEGER REFERENCES users(id)"))
         conn.execute(text("ALTER TABLE errors ADD COLUMN IF NOT EXISTS user_id INTEGER REFERENCES users(id)"))
         conn.execute(text("ALTER TABLE api_keys ADD COLUMN IF NOT EXISTS user_id INTEGER REFERENCES users(id)"))
-        # Replace single-column unique index with per-user composite one
+        # Drop any single-column unique constraint on fingerprint (try common names)
         conn.execute(text("ALTER TABLE incidents DROP CONSTRAINT IF EXISTS incidents_fingerprint_key"))
+        conn.execute(text("ALTER TABLE incidents DROP CONSTRAINT IF EXISTS uq_incidents_fingerprint"))
+        conn.execute(text("DROP INDEX IF EXISTS incidents_fingerprint_key"))
+        # Replace with per-user composite unique index
         conn.execute(text(
             "CREATE UNIQUE INDEX IF NOT EXISTS uq_incident_fingerprint_user "
             "ON incidents(fingerprint, user_id)"

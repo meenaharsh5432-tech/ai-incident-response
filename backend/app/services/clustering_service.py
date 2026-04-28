@@ -74,12 +74,20 @@ def cluster_error(db: Session, error: Error, user_id: Optional[int] = None) -> t
         db.refresh(incident)
         return incident, True
     except IntegrityError:
-        # Race condition: another worker inserted the same fingerprint+user_id.
+        # Race condition or stale unique constraint — fetch the matching incident.
         existing = (
             db.query(Incident)
             .filter(Incident.fingerprint == fingerprint, Incident.user_id == user_id)
             .first()
         )
+        if existing is None:
+            # Conflict is with a row owned by a different user (old schema remnant).
+            # Re-attempt insert without the savepoint so it goes through cleanly.
+            incident.id = None
+            db.add(incident)
+            db.commit()
+            db.refresh(incident)
+            return incident, True
         existing.occurrence_count += 1
         existing.last_seen = datetime.utcnow()
         db.commit()
