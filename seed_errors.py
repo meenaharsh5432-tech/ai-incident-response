@@ -443,12 +443,15 @@ ERRORS = [
 ]
 
 
-def post_error(url: str, payload: dict) -> dict:
+def post_error(url: str, payload: dict, api_key: str = "") -> dict:
     data = json.dumps(payload).encode()
+    headers = {"Content-Type": "application/json"}
+    if api_key:
+        headers["X-API-Key"] = api_key
     req = urllib.request.Request(
         f"{url}/api/errors",
         data=data,
-        headers={"Content-Type": "application/json"},
+        headers=headers,
         method="POST",
     )
     with urllib.request.urlopen(req, timeout=15) as resp:
@@ -458,6 +461,7 @@ def post_error(url: str, payload: dict) -> dict:
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--url", default="http://localhost:8001")
+    parser.add_argument("--api-key", default="", help="X-API-Key header value")
     parser.add_argument("--repeat", type=int, default=1, help="Send each error N times")
     parser.add_argument("--delay", type=float, default=0.3, help="Seconds between requests")
     parser.add_argument("--shuffle", action="store_true", help="Randomise order")
@@ -474,7 +478,7 @@ def main():
     for _ in range(args.repeat):
         for err in errors:
             try:
-                result = post_error(args.url, err)
+                result = post_error(args.url, err, api_key=args.api_key)
                 if result["is_new_incident"]:
                     new_count += 1
                     tag = "NEW      "

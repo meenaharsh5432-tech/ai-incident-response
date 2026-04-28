@@ -26,20 +26,21 @@ def _get_api_key(
     db: Session = Depends(get_db),
 ) -> Optional[APIKey]:
     settings = get_settings()
-    if not settings.REQUIRE_API_KEY:
-        return None  # auth disabled — allow all requests
 
-    if not x_api_key:
+    if x_api_key:
+        api_key = (
+            db.query(APIKey)
+            .filter(APIKey.key == x_api_key, APIKey.is_active == True)  # noqa: E712
+            .first()
+        )
+        if not api_key:
+            raise HTTPException(status_code=403, detail="Invalid or revoked API key")
+        return api_key
+
+    if settings.REQUIRE_API_KEY:
         raise HTTPException(status_code=401, detail="Missing X-API-Key header")
 
-    api_key = (
-        db.query(APIKey)
-        .filter(APIKey.key == x_api_key, APIKey.is_active == True)  # noqa: E712
-        .first()
-    )
-    if not api_key:
-        raise HTTPException(status_code=403, detail="Invalid or revoked API key")
-    return api_key
+    return None
 
 
 def _ingest_one(
