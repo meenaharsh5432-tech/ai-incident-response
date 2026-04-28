@@ -39,10 +39,48 @@ def init_db():
         conn.execute(text("ALTER TABLE incidents ADD COLUMN IF NOT EXISTS user_id INTEGER REFERENCES users(id)"))
         conn.execute(text("ALTER TABLE errors ADD COLUMN IF NOT EXISTS user_id INTEGER REFERENCES users(id)"))
         conn.execute(text("ALTER TABLE api_keys ADD COLUMN IF NOT EXISTS user_id INTEGER REFERENCES users(id)"))
-        # Drop any single-column unique constraint on fingerprint (try common names)
-        conn.execute(text("ALTER TABLE incidents DROP CONSTRAINT IF EXISTS incidents_fingerprint_key"))
-        conn.execute(text("ALTER TABLE incidents DROP CONSTRAINT IF EXISTS uq_incidents_fingerprint"))
-        conn.execute(text("DROP INDEX IF EXISTS incidents_fingerprint_key"))
+        # Drop any single-column unique constraint on fingerprint — name unknown, find it dynamically
+        conn.execute(text("""
+            DO $$
+            DECLARE r RECORD;
+            BEGIN
+                FOR r IN
+                    SELECT con.conname
+                    FROM pg_constraint con
+                    JOIN pg_class rel ON rel.oid = con.conrelid
+                    JOIN pg_attribute att ON att.attrelid = rel.oid
+                        AND att.attnum = ANY(con.conkey)
+                    WHERE rel.relname = 'incidents'
+                      AND con.contype = 'u'
+                      AND att.attname = 'fingerprint'
+                      AND array_length(con.conkey, 1) = 1
+                LOOP
+                    EXECUTE 'ALTER TABLE incidents DROP CONSTRAINT IF EXISTS ' || quote_ident(r.conname);
+                END LOOP;
+            END $$;
+        """))
+        # Also drop any unique index on fingerprint alone
+        conn.execute(text("""
+            DO $$
+            DECLARE r RECORD;
+            BEGIN
+                FOR r IN
+                    SELECT i.relname AS iname
+                    FROM pg_index ix
+                    JOIN pg_class i ON i.oid = ix.indexrelid
+                    JOIN pg_class t ON t.oid = ix.indrelid
+                    WHERE t.relname = 'incidents'
+                      AND ix.indisunique = true
+                      AND array_length(ix.indkey, 1) = 1
+                      AND ix.indkey[0] = (
+                          SELECT attnum FROM pg_attribute
+                          WHERE attrelid = t.oid AND attname = 'fingerprint'
+                      )
+                LOOP
+                    EXECUTE 'DROP INDEX IF EXISTS ' || quote_ident(r.iname);
+                END LOOP;
+            END $$;
+        """))
         # Replace with per-user composite unique index
         conn.execute(text(
             "CREATE UNIQUE INDEX IF NOT EXISTS uq_incident_fingerprint_user "
