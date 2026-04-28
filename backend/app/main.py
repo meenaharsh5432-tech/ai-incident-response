@@ -8,7 +8,7 @@ from fastapi_limiter import FastAPILimiter
 
 from app.config import get_settings
 from app.database import init_db
-from app.routers import api_keys, errors, incidents, stats
+from app.routers import api_keys, auth, errors, incidents, stats
 
 logging.basicConfig(
     level=logging.INFO,
@@ -61,6 +61,7 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+app.include_router(auth.router)
 app.include_router(errors.router)
 app.include_router(incidents.router)
 app.include_router(stats.router)

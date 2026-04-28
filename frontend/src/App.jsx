@@ -7,6 +7,8 @@ import IncidentDetail from './components/IncidentDetail'
 import ErrorRateGraph from './components/ErrorRateGraph'
 import MTTRChart from './components/MTTRChart'
 import APIKeys from './components/APIKeys'
+import LoginPage from './components/LoginPage'
+import { useAuth } from './context/AuthContext'
 import { getErrorMessage, getHealth, getIncident, getIncidents, getStats } from './api/client'
 
 const TABS = ['Overview', 'Active', 'Resolved', 'API Keys']
@@ -33,7 +35,25 @@ function Panel({ title, eyebrow, children, action }) {
   )
 }
 
-export default function App({ onLock }) {
+export default function App() {
+  const { user, loading: authLoading, logout } = useAuth()
+
+  if (authLoading) {
+    return (
+      <div className="flex min-h-screen items-center justify-center bg-slate-950">
+        <div className="h-8 w-8 animate-spin rounded-full border-2 border-white/10 border-t-cyan-400" />
+      </div>
+    )
+  }
+
+  if (!user) {
+    return <LoginPage />
+  }
+
+  return <Dashboard user={user} logout={logout} />
+}
+
+function Dashboard({ user, logout }) {
   const [tab, setTab] = useState('Overview')
   const [stats, setStats] = useState(null)
   const [health, setHealth] = useState(null)
@@ -258,20 +278,30 @@ export default function App({ onLock }) {
             >
               Refresh now
             </button>
-            {onLock && (
-              <button
-                onClick={onLock}
-                className="rounded-full border border-white/10 bg-white/5 px-4 py-2 text-slate-400 transition hover:border-rose-400/30 hover:bg-rose-500/10 hover:text-rose-300"
-              >
-                Lock
-              </button>
-            )}
             {selectedIncident?.last_seen && (
               <span className="text-sm text-slate-400">
                 Selected incident updated{' '}
                 {formatDistanceToNow(parseDate(selectedIncident.last_seen), { addSuffix: true })}
               </span>
             )}
+
+            <div className="ml-auto flex items-center gap-3">
+              {user.picture && (
+                <img
+                  src={user.picture}
+                  alt={user.name || user.email}
+                  className="h-8 w-8 rounded-full border border-white/10"
+                  referrerPolicy="no-referrer"
+                />
+              )}
+              <span className="text-sm text-slate-300">{user.name || user.email}</span>
+              <button
+                onClick={logout}
+                className="rounded-full border border-white/10 bg-white/5 px-4 py-2 text-slate-400 transition hover:border-rose-400/30 hover:bg-rose-500/10 hover:text-rose-300"
+              >
+                Sign out
+              </button>
+            </div>
           </div>
         </header>
 

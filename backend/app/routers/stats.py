@@ -6,23 +6,29 @@ from prometheus_client import CONTENT_TYPE_LATEST, generate_latest
 from sqlalchemy import func
 from sqlalchemy.orm import Session
 
+from app.auth import get_current_user
 from app.database import get_db
 from app.models.error import Error
 from app.models.feedback import Feedback
 from app.models.incident import Incident, IncidentStatus
+from app.models.user import User
 
 router = APIRouter(tags=["observability"])
 
 
 @router.get("/api/stats")
-def get_stats(db: Session = Depends(get_db)):
+def get_stats(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    uid = current_user.id
     now = datetime.utcnow()
     day_ago = now - timedelta(hours=24)
     hour_ago = now - timedelta(hours=1)
 
     active_count = (
         db.query(func.count(Incident.id))
-        .filter(Incident.status == IncidentStatus.active)
+        .filter(Incident.user_id == uid, Incident.status == IncidentStatus.active)
         .scalar()
         or 0
     )
@@ -30,6 +36,7 @@ def get_stats(db: Session = Depends(get_db)):
     critical_count = (
         db.query(func.count(Incident.id))
         .filter(
+            Incident.user_id == uid,
             Incident.status == IncidentStatus.active,
             Incident.severity == "critical",
         )
@@ -40,6 +47,7 @@ def get_stats(db: Session = Depends(get_db)):
     resolved_24h = (
         db.query(func.count(Incident.id))
         .filter(
+            Incident.user_id == uid,
             Incident.status == IncidentStatus.resolved,
             Incident.resolved_at >= day_ago,
         )
@@ -49,28 +57,38 @@ def get_stats(db: Session = Depends(get_db)):
 
     avg_mttr = (
         db.query(func.avg(Incident.mttr_seconds))
-        .filter(Incident.mttr_seconds.isnot(None))
+        .filter(Incident.user_id == uid, Incident.mttr_seconds.isnot(None))
         .scalar()
     )
 
     errors_last_hour = (
-        db.query(func.count(Error.id)).filter(Error.created_at >= hour_ago).scalar() or 0
+        db.query(func.count(Error.id))
+        .filter(Error.user_id == uid, Error.created_at >= hour_ago)
+        .scalar()
+        or 0
     )
 
     helpful = (
         db.query(func.count(Feedback.id))
-        .filter(Feedback.was_helpful.is_(True))
+        .join(Incident, Feedback.incident_id == Incident.id)
+        .filter(Incident.user_id == uid, Feedback.was_helpful.is_(True))
         .scalar()
         or 0
     )
-    total_feedback = db.query(func.count(Feedback.id)).scalar() or 0
+    total_feedback = (
+        db.query(func.count(Feedback.id))
+        .join(Incident, Feedback.incident_id == Incident.id)
+        .filter(Incident.user_id == uid)
+        .scalar()
+        or 0
+    )
 
     errors_by_service = (
         db.query(
             Error.service_name,
             func.count(Error.id).label("count"),
         )
-        .filter(Error.created_at >= day_ago)
+        .filter(Error.user_id == uid, Error.created_at >= day_ago)
         .group_by(Error.service_name)
         .all()
     )
@@ -81,7 +99,7 @@ def get_stats(db: Session = Depends(get_db)):
             Incident.service_name,
             func.avg(Incident.mttr_seconds).label("avg_mttr"),
         )
-        .filter(Incident.mttr_seconds.isnot(None))
+        .filter(Incident.user_id == uid, Incident.mttr_seconds.isnot(None))
         .group_by(Incident.service_name)
         .all()
     )
@@ -94,6 +112,7 @@ def get_stats(db: Session = Depends(get_db)):
         count = (
             db.query(func.count(Error.id))
             .filter(
+                Error.user_id == uid,
                 Error.created_at >= bucket_start,
                 Error.created_at < bucket_end,
             )
@@ -104,7 +123,7 @@ def get_stats(db: Session = Depends(get_db)):
 
     recent = (
         db.query(Incident)
-        .filter(Incident.status == IncidentStatus.active)
+        .filter(Incident.user_id == uid, Incident.status == IncidentStatus.active)
         .order_by(Incident.last_seen.desc())
         .limit(5)
         .all()

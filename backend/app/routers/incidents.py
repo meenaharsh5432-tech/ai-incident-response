@@ -2,14 +2,16 @@ import logging
 from datetime import datetime
 
 from fastapi import APIRouter, Depends, HTTPException, Query
-from app.limiter import OptionalRateLimiter
 from sqlalchemy import desc
 from sqlalchemy.orm import Session
 
+from app.auth import get_current_user
 from app.database import get_db
+from app.limiter import OptionalRateLimiter
 from app.models.error import Error
 from app.models.feedback import Feedback
 from app.models.incident import Incident, IncidentSeverity, IncidentStatus
+from app.models.user import User
 from app.schemas.feedback import FeedbackCreate, FeedbackResponse
 from app.schemas.incident import IncidentDetail, IncidentSummary, PaginatedIncidents, ResolveRequest
 from app.services import diagnosis_service, metrics_service
@@ -27,8 +29,9 @@ def list_incidents(
     service: str = Query(None),
     severity: str = Query(None),
     db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
 ):
-    q = db.query(Incident).order_by(desc(Incident.last_seen))
+    q = db.query(Incident).filter(Incident.user_id == current_user.id).order_by(desc(Incident.last_seen))
 
     if status:
         q = q.filter(Incident.status == status)
@@ -44,16 +47,28 @@ def list_incidents(
 
 
 @router.get("/{incident_id}", response_model=IncidentDetail)
-def get_incident(incident_id: int, db: Session = Depends(get_db)):
-    incident = db.get(Incident, incident_id)
+def get_incident(
+    incident_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    incident = db.query(Incident).filter(
+        Incident.id == incident_id, Incident.user_id == current_user.id
+    ).first()
     if not incident:
         raise HTTPException(status_code=404, detail="Incident not found")
     return incident
 
 
 @router.get("/{incident_id}/diagnose", dependencies=[Depends(OptionalRateLimiter(times=10, seconds=60))])
-def run_diagnosis(incident_id: int, db: Session = Depends(get_db)):
-    incident = db.get(Incident, incident_id)
+def run_diagnosis(
+    incident_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    incident = db.query(Incident).filter(
+        Incident.id == incident_id, Incident.user_id == current_user.id
+    ).first()
     if not incident:
         raise HTTPException(status_code=404, detail="Incident not found")
 
@@ -85,8 +100,11 @@ def resolve_incident(
     incident_id: int,
     body: ResolveRequest,
     db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
 ):
-    incident = db.get(Incident, incident_id)
+    incident = db.query(Incident).filter(
+        Incident.id == incident_id, Incident.user_id == current_user.id
+    ).first()
     if not incident:
         raise HTTPException(status_code=404, detail="Incident not found")
     if incident.status == IncidentStatus.resolved:
@@ -114,8 +132,11 @@ def add_feedback(
     incident_id: int,
     body: FeedbackCreate,
     db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
 ):
-    incident = db.get(Incident, incident_id)
+    incident = db.query(Incident).filter(
+        Incident.id == incident_id, Incident.user_id == current_user.id
+    ).first()
     if not incident:
         raise HTTPException(status_code=404, detail="Incident not found")
 

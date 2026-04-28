@@ -12,6 +12,7 @@ class Error(Base):
 
     id = Column(Integer, primary_key=True, index=True)
     incident_id = Column(Integer, ForeignKey("incidents.id"), index=True)
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=True, index=True)
     message = Column(Text)
     stack_trace = Column(Text, nullable=True)
     error_type = Column(String(200))

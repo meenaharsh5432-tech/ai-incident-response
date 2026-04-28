@@ -22,6 +22,19 @@ class Settings(BaseSettings):
         "https://*.vercel.app",
     ]
 
+    # Google OAuth
+    GOOGLE_CLIENT_ID: str = ""
+    GOOGLE_CLIENT_SECRET: str = ""
+    GOOGLE_REDIRECT_URI: str = "http://localhost:8001/auth/google/callback"
+
+    # JWT — generate a strong random secret: python -c "import secrets; print(secrets.token_hex(32))"
+    JWT_SECRET: str = "change-me-in-production"
+    JWT_ALGORITHM: str = "HS256"
+    JWT_EXPIRE_DAYS: int = 30
+
+    # Where to send users after OAuth succeeds
+    FRONTEND_URL: str = "http://localhost:5173"
+
     class Config:
         env_file = ".env"
         extra = "ignore"

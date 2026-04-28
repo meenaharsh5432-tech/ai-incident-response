@@ -2,11 +2,11 @@ import logging
 from typing import Optional
 
 from fastapi import APIRouter, Depends, Header, HTTPException
-from app.limiter import OptionalRateLimiter
 from sqlalchemy.orm import Session
 
 from app.config import get_settings
 from app.database import get_db
+from app.limiter import OptionalRateLimiter
 from app.models.api_key import APIKey
 from app.models.error import Error
 from app.schemas.error import (
@@ -45,6 +45,7 @@ def _get_api_key(
 def _ingest_one(
     payload: ErrorIngest,
     db: Session,
+    user_id: Optional[int] = None,
 ) -> ErrorResponse:
     error = Error(
         message=payload.message,
@@ -53,12 +54,13 @@ def _ingest_one(
         service_name=payload.service_name,
         environment=payload.environment.value,
         metadata_=payload.metadata,
+        user_id=user_id,
         embedding=None,
     )
     db.add(error)
     db.flush()
 
-    incident, is_new = clustering_service.cluster_error(db, error)
+    incident, is_new = clustering_service.cluster_error(db, error, user_id=user_id)
     error.incident_id = incident.id
     db.commit()
     db.refresh(error)
@@ -82,19 +84,22 @@ def _ingest_one(
 def ingest_error(
     payload: ErrorIngest,
     db: Session = Depends(get_db),
-    _api_key: Optional[APIKey] = Depends(_get_api_key),
+    api_key: Optional[APIKey] = Depends(_get_api_key),
 ):
-    return _ingest_one(payload, db)
+    user_id = api_key.user_id if api_key else None
+    return _ingest_one(payload, db, user_id=user_id)
 
 
 @router.post("/batch", response_model=BatchErrorResponse, status_code=201, dependencies=[Depends(OptionalRateLimiter(times=20, seconds=60))])
 def ingest_errors_batch(
     payload: ErrorBatchIngest,
     db: Session = Depends(get_db),
-    _api_key: Optional[APIKey] = Depends(_get_api_key),
+    api_key: Optional[APIKey] = Depends(_get_api_key),
 ):
     """Ingest multiple errors at once. Duplicate error_type+message pairs within
     the same batch are deduplicated before processing."""
+    user_id = api_key.user_id if api_key else None
+
     seen: set = set()
     unique_errors = []
     deduplicated = 0
@@ -109,7 +114,7 @@ def ingest_errors_batch(
 
     results = []
     for err in unique_errors:
-        results.append(_ingest_one(err, db))
+        results.append(_ingest_one(err, db, user_id=user_id))
 
     return BatchErrorResponse(
         processed=len(unique_errors),

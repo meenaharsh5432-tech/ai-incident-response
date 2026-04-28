@@ -26,7 +26,7 @@ def get_db():
 
 
 def init_db():
-    from app.models import incident, error, feedback, api_key  # noqa: register models
+    from app.models import user, incident, error, feedback, api_key  # noqa: register models
 
     with engine.connect() as conn:
         conn.execute(text("CREATE EXTENSION IF NOT EXISTS vector"))

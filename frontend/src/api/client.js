@@ -1,5 +1,7 @@
 import axios from 'axios'
 
+const TOKEN_KEY = 'auth_token'
+
 function resolveBaseUrl() {
   const configured = import.meta.env.VITE_API_URL?.trim()
   if (!configured) return ''
@@ -31,9 +33,22 @@ const api = axios.create({
   },
 })
 
+// Attach JWT on every request
+api.interceptors.request.use((config) => {
+  const token = localStorage.getItem(TOKEN_KEY)
+  if (token) {
+    config.headers.Authorization = `Bearer ${token}`
+  }
+  return config
+})
+
 api.interceptors.response.use(
   (response) => response,
   (error) => {
+    if (error.response?.status === 401) {
+      localStorage.removeItem(TOKEN_KEY)
+      window.location.reload()
+    }
     const wrapped = new Error(extractMessage(error))
     wrapped.status = error.response?.status
     wrapped.cause = error

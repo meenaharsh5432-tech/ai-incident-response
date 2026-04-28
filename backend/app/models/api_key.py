@@ -1,7 +1,7 @@
 import secrets
 from datetime import datetime
 
-from sqlalchemy import Boolean, Column, DateTime, Integer, String
+from sqlalchemy import Boolean, Column, DateTime, ForeignKey, Integer, String
 
 from app.database import Base
 
@@ -11,6 +11,7 @@ class APIKey(Base):
 
     id = Column(Integer, primary_key=True, index=True)
     key = Column(String(64), unique=True, nullable=False, index=True)
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=True, index=True)
     service_name = Column(String(100), nullable=False)
     description = Column(String(200), nullable=True)
     is_active = Column(Boolean, default=True, nullable=False)

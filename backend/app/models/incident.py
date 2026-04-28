@@ -2,7 +2,7 @@ import enum
 from datetime import datetime
 
 from pgvector.sqlalchemy import Vector
-from sqlalchemy import Column, DateTime, Enum as SAEnum, Float, Integer, JSON, String, Text
+from sqlalchemy import Column, DateTime, Enum as SAEnum, Float, ForeignKey, Integer, JSON, String, Text, UniqueConstraint
 from sqlalchemy.orm import relationship
 
 from app.database import Base
@@ -23,9 +23,13 @@ class IncidentSeverity(str, enum.Enum):
 
 class Incident(Base):
     __tablename__ = "incidents"
+    __table_args__ = (
+        UniqueConstraint("fingerprint", "user_id", name="uq_incident_fingerprint_user"),
+    )
 
     id = Column(Integer, primary_key=True, index=True)
-    fingerprint = Column(String(64), unique=True, index=True)
+    fingerprint = Column(String(64), index=True)
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=True, index=True)
     service_name = Column(String(100), index=True)
     error_type = Column(String(200), index=True)
     first_seen = Column(DateTime, default=datetime.utcnow)
