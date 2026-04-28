@@ -34,6 +34,19 @@ def init_db():
 
     Base.metadata.create_all(bind=engine)
 
+    # Idempotent schema migrations — safe to run on every startup
+    with engine.connect() as conn:
+        conn.execute(text("ALTER TABLE incidents ADD COLUMN IF NOT EXISTS user_id INTEGER REFERENCES users(id)"))
+        conn.execute(text("ALTER TABLE errors ADD COLUMN IF NOT EXISTS user_id INTEGER REFERENCES users(id)"))
+        conn.execute(text("ALTER TABLE api_keys ADD COLUMN IF NOT EXISTS user_id INTEGER REFERENCES users(id)"))
+        # Replace single-column unique index with per-user composite one
+        conn.execute(text("ALTER TABLE incidents DROP CONSTRAINT IF EXISTS incidents_fingerprint_key"))
+        conn.execute(text(
+            "CREATE UNIQUE INDEX IF NOT EXISTS uq_incident_fingerprint_user "
+            "ON incidents(fingerprint, user_id)"
+        ))
+        conn.commit()
+
     # Create IVFFlat index for fast approximate similarity search
     with engine.connect() as conn:
         conn.execute(text("""
