@@ -229,10 +229,10 @@ function Dashboard({ user, logout }) {
             <div className="max-w-3xl">
               <p className="text-xs uppercase tracking-[0.34em] text-cyan-300">AI Incident Response</p>
               <h1 className="mt-4 text-4xl font-semibold tracking-tight text-white sm:text-5xl">
-                Beautiful ops visibility, grounded in the live backend.
+                Incidents don't wait. Neither should your team.
               </h1>
               <p className="mt-4 max-w-2xl text-base leading-7 text-slate-300">
-                Track active incidents, inspect AI-assisted diagnosis, and move from alert to resolution with a frontend that reflects backend state clearly instead of hiding failures.
+                Detect, diagnose, and resolve in one place.
               </p>
             </div>
 
