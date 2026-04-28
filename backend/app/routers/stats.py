@@ -1,4 +1,4 @@
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 
 from fastapi import APIRouter, Depends
 from fastapi.responses import Response
@@ -105,6 +105,7 @@ def get_stats(
     )
     mttr_by_service = sorted(mttr_by_service, key=lambda row: row[1] or 0, reverse=True)
 
+    ist_offset = timedelta(hours=5, minutes=30)
     timeline = []
     for hour in range(23, -1, -1):
         bucket_start = now - timedelta(hours=hour + 1)
@@ -119,7 +120,7 @@ def get_stats(
             .scalar()
             or 0
         )
-        timeline.append({"hour": bucket_end.strftime("%H:%M"), "count": count})
+        timeline.append({"hour": (bucket_end + ist_offset).strftime("%H:%M"), "count": count})
 
     recent = (
         db.query(Incident)
