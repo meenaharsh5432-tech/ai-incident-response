@@ -2,6 +2,7 @@ import logging
 from datetime import datetime
 
 from fastapi import APIRouter, Depends, HTTPException, Query
+from app.limiter import OptionalRateLimiter
 from sqlalchemy import desc
 from sqlalchemy.orm import Session
 
@@ -50,7 +51,7 @@ def get_incident(incident_id: int, db: Session = Depends(get_db)):
     return incident
 
 
-@router.get("/{incident_id}/diagnose")
+@router.get("/{incident_id}/diagnose", dependencies=[Depends(OptionalRateLimiter(times=10, seconds=60))])
 def run_diagnosis(incident_id: int, db: Session = Depends(get_db)):
     incident = db.get(Incident, incident_id)
     if not incident:

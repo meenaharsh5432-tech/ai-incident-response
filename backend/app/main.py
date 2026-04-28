@@ -1,8 +1,10 @@
 import logging
 from contextlib import asynccontextmanager
 
+import redis.asyncio as aioredis
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi_limiter import FastAPILimiter
 
 from app.config import get_settings
 from app.database import init_db
@@ -30,9 +32,18 @@ async def lifespan(app: FastAPI):
     finally:
         db.close()
 
+    try:
+        redis_client = aioredis.from_url(settings.REDIS_URL, encoding="utf-8", decode_responses=True)
+        await FastAPILimiter.init(redis_client)
+        logger.info("Rate limiter initialized")
+    except Exception as exc:
+        logger.warning("Rate limiter disabled — Redis unavailable: %s", exc)
+
     logger.info("Ready")
     yield
     logger.info("Shutting down")
+    if FastAPILimiter.redis is not None:
+        await FastAPILimiter.close()
 
 
 app = FastAPI(

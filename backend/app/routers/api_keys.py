@@ -2,6 +2,7 @@ import logging
 from typing import List
 
 from fastapi import APIRouter, Depends, HTTPException
+from app.limiter import OptionalRateLimiter
 from sqlalchemy.orm import Session
 
 from app.database import get_db
@@ -12,7 +13,7 @@ logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api/keys", tags=["api-keys"])
 
 
-@router.post("", response_model=APIKeyResponse, status_code=201)
+@router.post("", response_model=APIKeyResponse, status_code=201, dependencies=[Depends(OptionalRateLimiter(times=10, seconds=60))])
 def create_api_key(payload: APIKeyCreate, db: Session = Depends(get_db)):
     """Generate a new API key for a service. Store the returned key — it won't be shown again."""
     api_key = APIKey(

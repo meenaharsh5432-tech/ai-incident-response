@@ -2,6 +2,7 @@ import logging
 from typing import Optional
 
 from fastapi import APIRouter, Depends, Header, HTTPException
+from app.limiter import OptionalRateLimiter
 from sqlalchemy.orm import Session
 
 from app.config import get_settings
@@ -77,7 +78,7 @@ def _ingest_one(
     )
 
 
-@router.post("", response_model=ErrorResponse, status_code=201)
+@router.post("", response_model=ErrorResponse, status_code=201, dependencies=[Depends(OptionalRateLimiter(times=100, seconds=60))])
 def ingest_error(
     payload: ErrorIngest,
     db: Session = Depends(get_db),
@@ -86,7 +87,7 @@ def ingest_error(
     return _ingest_one(payload, db)
 
 
-@router.post("/batch", response_model=BatchErrorResponse, status_code=201)
+@router.post("/batch", response_model=BatchErrorResponse, status_code=201, dependencies=[Depends(OptionalRateLimiter(times=20, seconds=60))])
 def ingest_errors_batch(
     payload: ErrorBatchIngest,
     db: Session = Depends(get_db),
