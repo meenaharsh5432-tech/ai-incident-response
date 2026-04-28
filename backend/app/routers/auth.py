@@ -22,11 +22,11 @@ GOOGLE_USERINFO_URL = "https://www.googleapis.com/oauth2/v2/userinfo"
 
 @router.get("/auth/google")
 def google_login():
-    if not settings.GOOGLE_CLIENT_ID:
+    if not settings.OAUTH_GOOGLE_CLIENT_ID:
         raise HTTPException(status_code=501, detail="Google OAuth is not configured")
     params = {
-        "client_id": settings.GOOGLE_CLIENT_ID,
-        "redirect_uri": settings.GOOGLE_REDIRECT_URI,
+        "client_id": settings.OAUTH_GOOGLE_CLIENT_ID,
+        "redirect_uri": settings.OAUTH_GOOGLE_REDIRECT_URI,
         "response_type": "code",
         "scope": "openid email profile",
         "access_type": "offline",
@@ -37,7 +37,7 @@ def google_login():
 
 @router.get("/auth/google/callback")
 async def google_callback(code: str, db: Session = Depends(get_db)):
-    if not settings.GOOGLE_CLIENT_ID:
+    if not settings.OAUTH_GOOGLE_CLIENT_ID:
         raise HTTPException(status_code=501, detail="Google OAuth is not configured")
 
     async with httpx.AsyncClient() as client:
@@ -45,9 +45,9 @@ async def google_callback(code: str, db: Session = Depends(get_db)):
             GOOGLE_TOKEN_URL,
             data={
                 "code": code,
-                "client_id": settings.GOOGLE_CLIENT_ID,
-                "client_secret": settings.GOOGLE_CLIENT_SECRET,
-                "redirect_uri": settings.GOOGLE_REDIRECT_URI,
+                "client_id": settings.OAUTH_GOOGLE_CLIENT_ID,
+                "client_secret": settings.OAUTH_GOOGLE_CLIENT_SECRET,
+                "redirect_uri": settings.OAUTH_GOOGLE_REDIRECT_URI,
                 "grant_type": "authorization_code",
             },
         )

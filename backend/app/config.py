@@ -23,9 +23,9 @@ class Settings(BaseSettings):
     ]
 
     # Google OAuth
-    GOOGLE_CLIENT_ID: str = ""
-    GOOGLE_CLIENT_SECRET: str = ""
-    GOOGLE_REDIRECT_URI: str = "http://localhost:8001/auth/google/callback"
+    OAUTH_GOOGLE_CLIENT_ID: str = ""
+    OAUTH_GOOGLE_CLIENT_SECRET: str = ""
+    OAUTH_GOOGLE_REDIRECT_URI: str = "http://localhost:8001/auth/google/callback"
 
     # JWT — generate a strong random secret: python -c "import secrets; print(secrets.token_hex(32))"
     JWT_SECRET: str = "change-me-in-production"

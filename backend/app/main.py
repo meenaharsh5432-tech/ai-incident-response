@@ -41,7 +41,7 @@ async def lifespan(app: FastAPI):
 
     logger.info(
         "Google OAuth configured: %s | JWT secret set: %s | Frontend URL: %s",
-        bool(settings.GOOGLE_CLIENT_ID),
+        bool(settings.OAUTH_GOOGLE_CLIENT_ID),
         bool(settings.JWT_SECRET and settings.JWT_SECRET != "change-me-in-production"),
         settings.FRONTEND_URL,
     )
