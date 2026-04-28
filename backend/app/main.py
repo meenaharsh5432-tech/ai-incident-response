@@ -39,6 +39,12 @@ async def lifespan(app: FastAPI):
     except Exception as exc:
         logger.warning("Rate limiter disabled — Redis unavailable: %s", exc)
 
+    logger.info(
+        "Google OAuth configured: %s | JWT secret set: %s | Frontend URL: %s",
+        bool(settings.GOOGLE_CLIENT_ID),
+        bool(settings.JWT_SECRET and settings.JWT_SECRET != "change-me-in-production"),
+        settings.FRONTEND_URL,
+    )
     logger.info("Ready")
     yield
     logger.info("Shutting down")

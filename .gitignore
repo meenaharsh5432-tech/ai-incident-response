@@ -31,5 +31,3 @@ Thumbs.db
 *.pem
 *.key
 incident_fallback.log
-
-.claude/
