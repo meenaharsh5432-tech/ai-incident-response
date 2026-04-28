@@ -52,8 +52,9 @@ async def google_callback(code: str, db: Session = Depends(get_db)):
             },
         )
         if token_resp.status_code != 200:
+            google_error = token_resp.json().get("error_description") or token_resp.text
             logger.error("Google token exchange failed: %s", token_resp.text)
-            raise HTTPException(status_code=400, detail="OAuth token exchange failed")
+            raise HTTPException(status_code=400, detail=f"OAuth token exchange failed: {google_error}")
 
         tokens = token_resp.json()
         access_token = tokens.get("access_token")
