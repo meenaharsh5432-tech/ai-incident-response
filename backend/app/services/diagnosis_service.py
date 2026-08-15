@@ -99,24 +99,44 @@ def diagnose_incident(incident: Incident, error_message: str, stack_trace: str) 
     # RemoteProtocolError covers "Connection closed by server" (common on Render free tier)
     _conn_errors = (httpx.ConnectError, httpx.TimeoutException, httpx.RemoteProtocolError)
 
-    def _post() -> dict:
-        with httpx.Client(timeout=settings.GROQ_TIMEOUT) as client:
-            response = client.post(
-                "https://api.groq.com/openai/v1/chat/completions",
-                headers=request_headers,
-                json=request_payload,
+    def _post(attempt: int) -> dict:
+        started = time.perf_counter()
+        try:
+            with httpx.Client(timeout=settings.GROQ_TIMEOUT) as client:
+                response = client.post(
+                    "https://api.groq.com/openai/v1/chat/completions",
+                    headers=request_headers,
+                    json=request_payload,
+                )
+                response.raise_for_status()
+                payload = response.json()
+        except Exception:
+            logger.info(
+                "Groq call failed for incident %s (attempt %d) after %.0f ms",
+                incident.id, attempt, (time.perf_counter() - started) * 1000,
             )
-            response.raise_for_status()
-            return response.json()
+            raise
 
+        usage = payload.get("usage") or {}
+        logger.info(
+            "Groq call for incident %s (attempt %d): %.0f ms, %s prompt + %s completion tokens",
+            incident.id,
+            attempt,
+            (time.perf_counter() - started) * 1000,
+            usage.get("prompt_tokens", "?"),
+            usage.get("completion_tokens", "?"),
+        )
+        return payload
+
+    total_started = time.perf_counter()
     try:
         try:
-            result = _post()
+            result = _post(1)
         except _conn_errors as exc:
             logger.warning("Diagnosis connection error for incident %s (attempt 1), retrying in 5s: %s", incident.id, exc)
             time.sleep(5)
             try:
-                result = _post()
+                result = _post(2)
             except _conn_errors as retry_exc:
                 logger.warning("Diagnosis failed after retry for incident %s: %s", incident.id, retry_exc)
                 return _CONN_FALLBACK
@@ -128,6 +148,10 @@ def diagnose_incident(incident: Incident, error_message: str, stack_trace: str) 
         r.setex(f"dx:cooldown:{incident.id}", settings.DIAGNOSIS_COOLDOWN_SECONDS, "1")
         r.set(f"dx:count:{incident.id}", incident.occurrence_count)
 
+        logger.info(
+            "Diagnosis complete for incident %s in %.0f ms end-to-end",
+            incident.id, (time.perf_counter() - total_started) * 1000,
+        )
         return diagnosis
 
     except Exception as exc:
