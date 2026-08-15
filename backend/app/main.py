@@ -39,6 +39,10 @@ async def lifespan(app: FastAPI):
     except Exception as exc:
         logger.warning("Rate limiter disabled — Redis unavailable: %s", exc)
 
+    # Load the embedding model now so the first ingest isn't slowed by it
+    from app.services.embedding_service import get_model
+    logger.info("Semantic clustering enabled: %s", bool(get_model()))
+
     logger.info(
         "Google OAuth configured: %s | JWT secret set: %s | Frontend URL: %s",
         bool(settings.OAUTH_GOOGLE_CLIENT_ID),

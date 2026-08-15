@@ -10,6 +10,8 @@ class Settings(BaseSettings):
     GROQ_TIMEOUT: int = 30
     EMBEDDING_MODEL: str = "all-MiniLM-L6-v2"
     SIMILARITY_THRESHOLD: float = 0.85
+    # Semantic clustering loads a ~90MB model into memory; disable on small instances
+    ENABLE_SEMANTIC_CLUSTERING: bool = True
     DIAGNOSIS_COOLDOWN_SECONDS: int = 3600
     DIAGNOSIS_SPIKE_MULTIPLIER: float = 10.0
     REQUIRE_API_KEY: bool = False  # set True in production to enforce X-API-Key on /api/errors

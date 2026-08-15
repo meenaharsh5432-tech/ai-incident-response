@@ -15,7 +15,7 @@ from app.schemas.error import (
     ErrorIngest,
     ErrorResponse,
 )
-from app.services import clustering_service, metrics_service
+from app.services import clustering_service, embedding_service, metrics_service
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api/errors", tags=["errors"])
@@ -56,7 +56,9 @@ def _ingest_one(
         environment=payload.environment.value,
         metadata_=payload.metadata,
         user_id=user_id,
-        embedding=None,
+        embedding=embedding_service.generate_embedding(
+            payload.error_type, payload.message, payload.stack_trace
+        ),
     )
     db.add(error)
     db.flush()

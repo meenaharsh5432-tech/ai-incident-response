@@ -1,12 +1,17 @@
+import logging
 from datetime import datetime
 from typing import Optional
 
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
+from app.config import get_settings
 from app.models.error import Error
 from app.models.incident import Incident, IncidentStatus
 from app.services.embedding_service import generate_fingerprint
+
+logger = logging.getLogger(__name__)
+settings = get_settings()
 
 
 def _fingerprint_from_error(error: Error) -> str:
@@ -15,6 +20,41 @@ def _fingerprint_from_error(error: Error) -> str:
         error.message or "",
         error.stack_trace,
     )
+
+
+def _find_similar_incident(
+    db: Session, embedding: list[float], user_id: Optional[int]
+) -> Optional[Incident]:
+    """Nearest incident by cosine distance, if it clears SIMILARITY_THRESHOLD.
+
+    Vectors are normalized at encode time, so cosine distance = 1 - similarity.
+    """
+    max_distance = 1.0 - settings.SIMILARITY_THRESHOLD
+
+    try:
+        distance = Incident.representative_embedding.cosine_distance(embedding)
+        row = (
+            db.query(Incident, distance.label("distance"))
+            .filter(
+                Incident.user_id == user_id,
+                Incident.representative_embedding.isnot(None),
+            )
+            .order_by(distance)
+            .limit(1)
+            .first()
+        )
+    except Exception as exc:
+        logger.warning("Similarity search failed, using fingerprint only: %s", exc)
+        return None
+
+    if row is None or row.distance > max_distance:
+        return None
+
+    logger.info(
+        "Semantic match: incident %s at similarity %.3f",
+        row.Incident.id, 1.0 - row.distance,
+    )
+    return row.Incident
 
 
 def cluster_error(db: Session, error: Error, user_id: Optional[int] = None) -> tuple[Incident, bool]:
@@ -32,6 +72,11 @@ def cluster_error(db: Session, error: Error, user_id: Optional[int] = None) -> t
         .filter(Incident.fingerprint == fingerprint, Incident.user_id == user_id)
         .first()
     )
+
+    if existing is None and error.embedding is not None:
+        # No exact fingerprint match — fall back to semantic similarity so the same
+        # bug with differently-worded messages lands on one incident.
+        existing = _find_similar_incident(db, error.embedding, user_id)
 
     if existing:
         now = datetime.utcnow()
@@ -64,6 +109,7 @@ def cluster_error(db: Session, error: Error, user_id: Optional[int] = None) -> t
         first_seen=datetime.utcnow(),
         last_seen=datetime.utcnow(),
         occurrence_count=1,
+        representative_embedding=error.embedding,
     )
 
     try:
