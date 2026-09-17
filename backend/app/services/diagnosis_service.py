@@ -86,13 +86,14 @@ def diagnose_incident(incident: Incident, error_message: str, stack_trace: str) 
         f"Stack trace:\n{stack_trace or '(not provided)'}"
     )
     request_payload = {
-        "model": "llama-3.1-8b-instant",
+        "model": settings.GROQ_MODEL,
         "messages": [
             {"role": "system", "content": SYSTEM_PROMPT},
             {"role": "user", "content": user_content},
         ],
         "temperature": 0.1,
-        "max_tokens": 1024,
+        "max_completion_tokens": 4096,
+        "response_format": {"type": "json_object"},
     }
     request_headers = {
         "Authorization": f"Bearer {settings.GROQ_API_KEY}",
@@ -160,6 +161,22 @@ def diagnose_incident(incident: Incident, error_message: str, stack_trace: str) 
         )
         return diagnosis
 
+    except httpx.HTTPStatusError as exc:
+        try:
+            provider_error = exc.response.json().get("error", {})
+            message = provider_error.get("message", "") if isinstance(provider_error, dict) else ""
+        except (ValueError, AttributeError):
+            message = ""
+        message = str(message).replace(settings.GROQ_API_KEY, "[redacted]")[:500]
+        logger.warning(
+            "Groq rejected diagnosis for incident %s: status=%s model=%s message=%s",
+            incident.id, exc.response.status_code, settings.GROQ_MODEL, message,
+        )
+        return _fallback(
+            f"Diagnosis request failed: Groq returned HTTP {exc.response.status_code}. "
+            + (f"Check GROQ_MODEL ({settings.GROQ_MODEL}) and model access in Groq Console."
+               if exc.response.status_code == 404 else "Check backend logs for details.")
+        )
     except Exception as exc:
         logger.warning("Diagnosis failed for incident %s: %s", incident.id, exc)
         return _fallback(f"Diagnosis request failed: {exc}")

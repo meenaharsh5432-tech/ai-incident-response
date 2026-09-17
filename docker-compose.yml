@@ -35,6 +35,7 @@ services:
       DATABASE_URL: postgresql://incident_user:incident_pass@postgres:5432/incident_db
       REDIS_URL: redis://redis:6379
       GROQ_API_KEY: ${GROQ_API_KEY:-}
+      GROQ_MODEL: ${GROQ_MODEL:-openai/gpt-oss-20b}
     depends_on:
       postgres:
         condition: service_healthy

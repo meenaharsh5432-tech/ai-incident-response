@@ -5,6 +5,7 @@ export default function DiagnosisPanel({ incident, onDiagnosed, onFeedback }) {
   const [fetchedDiagnosis, setFetchedDiagnosis] = useState(null)
   const [diagnosing, setDiagnosing] = useState(false)
   const [diagnosisError, setDiagnosisError] = useState('')
+  const [retryRequest, setRetryRequest] = useState(null)
   const [submitting, setSubmitting] = useState(false)
   const [feedbackDone, setFeedbackDone] = useState(false)
   const [actualFix, setActualFix] = useState('')
@@ -24,7 +25,7 @@ export default function DiagnosisPanel({ incident, onDiagnosed, onFeedback }) {
     setFeedbackError('')
 
     // If the incident already has a diagnosis, nothing to do
-    if (incident.ai_diagnosis) {
+    if (incident.ai_diagnosis && retryRequest?.incidentId !== incident.id) {
       console.log('[DiagnosisPanel] skipping diagnose — ai_diagnosis is already set:', incident.ai_diagnosis)
       return
     }
@@ -52,7 +53,7 @@ export default function DiagnosisPanel({ incident, onDiagnosed, onFeedback }) {
       .finally(() => { if (!cancelled) setDiagnosing(false) })
 
     return () => { cancelled = true }
-  }, [incident.id]) // eslint-disable-line react-hooks/exhaustive-deps
+  }, [incident.id, retryRequest]) // eslint-disable-line react-hooks/exhaustive-deps
 
   if (diagnosing) {
     return (
@@ -71,6 +72,7 @@ export default function DiagnosisPanel({ incident, onDiagnosed, onFeedback }) {
       <div className="rounded-[1.75rem] border border-white/10 bg-white/5 p-6 backdrop-blur">
         <h3 className="mb-2 text-xs font-semibold uppercase tracking-[0.24em] text-slate-400">AI Diagnosis</h3>
         <p className="text-sm text-rose-300">{diagnosisError}</p>
+        <button className="mt-3 text-sm text-cyan-300" onClick={() => setRetryRequest({ incidentId: incident.id })}>Retry diagnosis</button>
       </div>
     )
   }
@@ -101,6 +103,7 @@ export default function DiagnosisPanel({ incident, onDiagnosed, onFeedback }) {
   return (
     <div className="space-y-5 rounded-[1.75rem] border border-white/10 bg-white/5 p-6 backdrop-blur">
       <h3 className="text-xs font-semibold uppercase tracking-[0.24em] text-slate-400">AI Diagnosis</h3>
+      <button className="text-sm text-cyan-300" onClick={() => setRetryRequest({ incidentId: incident.id })}>Run diagnosis again</button>
 
       <div>
         <p className="mb-1 text-xs uppercase tracking-[0.18em] text-slate-500">Root cause</p>
