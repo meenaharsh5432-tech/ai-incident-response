@@ -33,10 +33,18 @@ async def lifespan(app: FastAPI):
         db.close()
 
     try:
-        redis_client = aioredis.from_url(settings.REDIS_URL, encoding="utf-8", decode_responses=True)
+        redis_client = aioredis.from_url(
+            settings.REDIS_URL, encoding="utf-8", decode_responses=True,
+            socket_connect_timeout=2, socket_timeout=2,
+        )
         await FastAPILimiter.init(redis_client)
         logger.info("Rate limiter initialized")
     except Exception as exc:
+        # init assigns the client before loading its Lua script, which can fail.
+        failed_client = FastAPILimiter.redis
+        FastAPILimiter.redis = None
+        if failed_client is not None:
+            await failed_client.aclose()
         logger.warning("Rate limiter disabled — Redis unavailable: %s", exc)
 
     # Load the embedding model now so the first ingest isn't slowed by it

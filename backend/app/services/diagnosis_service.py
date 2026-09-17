@@ -18,7 +18,10 @@ _redis: Optional[redis.Redis] = None
 def get_redis() -> redis.Redis:
     global _redis
     if _redis is None:
-        _redis = redis.from_url(settings.REDIS_URL, decode_responses=True)
+        _redis = redis.from_url(
+            settings.REDIS_URL, decode_responses=True,
+            socket_connect_timeout=2, socket_timeout=2,
+        )
     return _redis
 
 
@@ -144,9 +147,12 @@ def diagnose_incident(incident: Incident, error_message: str, stack_trace: str) 
         raw = result["choices"][0]["message"]["content"].strip()
         diagnosis = _parse_json(raw)
 
-        r = get_redis()
-        r.setex(f"dx:cooldown:{incident.id}", settings.DIAGNOSIS_COOLDOWN_SECONDS, "1")
-        r.set(f"dx:count:{incident.id}", incident.occurrence_count)
+        try:
+            r = get_redis()
+            r.setex(f"dx:cooldown:{incident.id}", settings.DIAGNOSIS_COOLDOWN_SECONDS, "1")
+            r.set(f"dx:count:{incident.id}", incident.occurrence_count)
+        except redis.exceptions.RedisError:
+            logger.warning("Diagnosis cache unavailable for incident %s; keeping AI result", incident.id)
 
         logger.info(
             "Diagnosis complete for incident %s in %.0f ms end-to-end",

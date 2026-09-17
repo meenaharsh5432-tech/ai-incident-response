@@ -1,6 +1,11 @@
+import logging
+
 from fastapi import Request, Response
+from redis.exceptions import ConnectionError, TimeoutError
 from fastapi_limiter import FastAPILimiter
 from fastapi_limiter.depends import RateLimiter
+
+logger = logging.getLogger(__name__)
 
 
 class OptionalRateLimiter:
@@ -12,4 +17,7 @@ class OptionalRateLimiter:
     async def __call__(self, request: Request, response: Response):
         if FastAPILimiter.redis is None:
             return
-        await self._limiter(request, response)
+        try:
+            await self._limiter(request, response)
+        except (ConnectionError, TimeoutError):
+            logger.warning("Rate limiter skipped because Redis is unavailable")
